@@ -1,0 +1,121 @@
+{
+  "common": {
+    "loading": "Cargando...",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "create": "Crear",
+    "update": "Actualizar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "sort": "Ordenar",
+    "actions": "Acciones",
+    "confirm": "Confirmar",
+    "yes": "Sí",
+    "no": "No",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "back": "Atrás",
+    "finish": "Finalizar",
+    "close": "Cerrar"
+  },
+  "auth": {
+    "login": "Iniciar Sesión",
+    "register": "Registrarse",
+    "logout": "Cerrar Sesión",
+    "email": "Correo Electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar Contraseña",
+    "name": "Nombre",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "signInToAccount": "Inicia sesión en tu cuenta",
+    "createAccount": "Crea tu cuenta",
+    "alreadyHaveAccount": "¿Ya tienes una cuenta?",
+    "dontHaveAccount": "¿No tienes una cuenta?",
+    "loginError": "Correo electrónico o contraseña inválidos",
+    "registerSuccess": "Cuenta creada exitosamente",
+    "logoutSuccess": "Sesión cerrada exitosamente"
+  },
+  "navigation": {
+    "dashboard": "Panel",
+    "users": "Usuarios",
+    "profile": "Perfil",
+    "settings": "Configuración",
+    "onboarding": "Incorporación"
+  },
+  "dashboard": {
+    "welcome": "Bienvenido a tu panel",
+    "totalUsers": "Total de Usuarios",
+    "activeUsers": "Usuarios Activos",
+    "revenue": "Ingresos",
+    "growth": "Crecimiento"
+  },
+  "users": {
+    "title": "Gestión de Usuarios",
+    "createUser": "Crear Usuario",
+    "editUser": "Editar Usuario",
+    "deleteUser": "Eliminar Usuario",
+    "confirmDelete": "¿Estás seguro de que quieres eliminar este usuario?",
+    "userDeleted": "Usuario eliminado exitosamente",
+    "userCreated": "Usuario creado exitosamente",
+    "userUpdated": "Usuario actualizado exitosamente",
+    "columns": {
+      "name": "Nombre",
+      "email": "Correo",
+      "role": "Rol",
+      "status": "Estado",
+      "createdAt": "Creado"
+    }
+  },
+  "onboarding": {
+    "title": "¡Bienvenido! Vamos a configurarte",
+    "steps": {
+      "profile": {
+        "title": "Información del Perfil",
+        "description": "Cuéntanos sobre ti"
+      },
+      "address": {
+        "title": "Detalles de Dirección",
+        "description": "¿Dónde te encuentras?"
+      },
+      "preferences": {
+        "title": "Preferencias",
+        "description": "Personaliza tu experiencia"
+      }
+    },
+    "fields": {
+      "name": "Nombre Completo",
+      "bio": "Biografía",
+      "avatar": "Foto de Perfil",
+      "street": "Dirección",
+      "city": "Ciudad",
+      "state": "Estado/Provincia",
+      "zipCode": "Código Postal",
+      "country": "País",
+      "theme": "Preferencia de Tema",
+      "language": "Idioma",
+      "notifications": "Notificaciones"
+    }
+  },
+  "theme": {
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema",
+    "corporate": "Corporativo",
+    "playful": "Divertido"
+  },
+  "errors": {
+    "generic": "Algo salió mal. Por favor, intenta de nuevo.",
+    "network": "Error de red. Por favor, verifica tu conexión.",
+    "unauthorized": "No estás autorizado para realizar esta acción.",
+    "notFound": "El recurso solicitado no fue encontrado.",
+    "validation": "Por favor, verifica tu entrada e intenta de nuevo."
+  },
+  "success": {
+    "saved": "Cambios guardados exitosamente",
+    "deleted": "Elemento eliminado exitosamente",
+    "created": "Elemento creado exitosamente",
+    "updated": "Elemento actualizado exitosamente"
+  }
+}

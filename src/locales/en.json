@@ -1,0 +1,121 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "update": "Update",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "actions": "Actions",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "next": "Next",
+    "previous": "Previous",
+    "back": "Back",
+    "finish": "Finish",
+    "close": "Close"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "name": "Name",
+    "forgotPassword": "Forgot Password?",
+    "signInToAccount": "Sign in to your account",
+    "createAccount": "Create your account",
+    "alreadyHaveAccount": "Already have an account?",
+    "dontHaveAccount": "Don't have an account?",
+    "loginError": "Invalid email or password",
+    "registerSuccess": "Account created successfully",
+    "logoutSuccess": "Logged out successfully"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "users": "Users",
+    "profile": "Profile",
+    "settings": "Settings",
+    "onboarding": "Onboarding"
+  },
+  "dashboard": {
+    "welcome": "Welcome to your dashboard",
+    "totalUsers": "Total Users",
+    "activeUsers": "Active Users",
+    "revenue": "Revenue",
+    "growth": "Growth"
+  },
+  "users": {
+    "title": "User Management",
+    "createUser": "Create User",
+    "editUser": "Edit User",
+    "deleteUser": "Delete User",
+    "confirmDelete": "Are you sure you want to delete this user?",
+    "userDeleted": "User deleted successfully",
+    "userCreated": "User created successfully",
+    "userUpdated": "User updated successfully",
+    "columns": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "createdAt": "Created"
+    }
+  },
+  "onboarding": {
+    "title": "Welcome! Let's get you set up",
+    "steps": {
+      "profile": {
+        "title": "Profile Information",
+        "description": "Tell us about yourself"
+      },
+      "address": {
+        "title": "Address Details",
+        "description": "Where are you located?"
+      },
+      "preferences": {
+        "title": "Preferences",
+        "description": "Customize your experience"
+      }
+    },
+    "fields": {
+      "name": "Full Name",
+      "bio": "Bio",
+      "avatar": "Profile Picture",
+      "street": "Street Address",
+      "city": "City",
+      "state": "State/Province",
+      "zipCode": "ZIP Code",
+      "country": "Country",
+      "theme": "Theme Preference",
+      "language": "Language",
+      "notifications": "Notifications"
+    }
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "corporate": "Corporate",
+    "playful": "Playful"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "network": "Network error. Please check your connection.",
+    "unauthorized": "You are not authorized to perform this action.",
+    "notFound": "The requested resource was not found.",
+    "validation": "Please check your input and try again."
+  },
+  "success": {
+    "saved": "Changes saved successfully",
+    "deleted": "Item deleted successfully",
+    "created": "Item created successfully",
+    "updated": "Item updated successfully"
+  }
+}
