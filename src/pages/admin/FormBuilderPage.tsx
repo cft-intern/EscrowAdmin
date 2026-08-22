@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  AlertCircle,
   Type,
   AlignLeft,
   Hash,
@@ -28,7 +29,6 @@ import {
   Eye,
   Save,
   Send,
-  AlertTriangle,
   Sparkles,
   ArrowUp,
   ArrowDown,
@@ -127,7 +127,6 @@ export const FormBuilderPage: React.FC = () => {
   const {
     categories,
     activeCategoryId,
-    setActiveCategoryId,
     getCategory,
     addField,
     updateField,
@@ -163,7 +162,6 @@ export const FormBuilderPage: React.FC = () => {
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
     if (dragOverIndex !== index) {
       setDragOverIndex(index);
     }
@@ -171,26 +169,20 @@ export const FormBuilderPage: React.FC = () => {
 
   const handleDrop = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
-    if (!category || draggedIndex === null || draggedIndex === targetIndex) {
+    if (draggedIndex === null || !category || draggedIndex === targetIndex) {
       setDraggedIndex(null);
       setDragOverIndex(null);
       return;
     }
 
-    const newFields = [...fields];
-    const movedItem = newFields[draggedIndex];
+    const currentFields = [...(category.fields || [])];
+    const movedItem = currentFields[draggedIndex];
     if (movedItem) {
-      newFields.splice(draggedIndex, 1);
-      newFields.splice(targetIndex, 0, movedItem);
-      reorderFields(category.id, newFields);
-      toast.success('Fields reordered');
+      currentFields.splice(draggedIndex, 1);
+      currentFields.splice(targetIndex, 0, movedItem);
+      reorderFields(category.id, currentFields);
     }
 
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -262,14 +254,18 @@ export const FormBuilderPage: React.FC = () => {
   };
 
   const handleSaveForm = () => {
-    saveForm(category.id);
-    toast.success('Form draft saved successfully!');
+    const result = saveForm(category.id);
+    toast.success(result.message);
   };
 
-  const handleConfirmPublish = () => {
-    publishForm(category.id);
+  const handleConfirmPublish = async () => {
+    const result = await publishForm(category.id);
     setIsPublishModalOpen(false);
-    toast.success(`Category "${category.title}" form published successfully!`);
+    if (result.success) {
+      toast.success(result.message);
+    } else {
+      toast.error(result.message);
+    }
   };
 
   return (
@@ -278,7 +274,7 @@ export const FormBuilderPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
           <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-extrabold text-slate-100">{category.title}</h1>
+            <h1 className="text-2xl font-extrabold text-slate-100">{category.title || category.name}</h1>
             <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-semibold px-2.5 py-0.5 rounded-full">
               {fields.length} {fields.length === 1 ? 'Field' : 'Fields'}
             </span>
@@ -313,25 +309,22 @@ export const FormBuilderPage: React.FC = () => {
       <div className="flex lg:hidden rounded-xl bg-slate-950 p-1 border border-slate-800">
         <button
           onClick={() => setMobileTab('palette')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'palette' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-          }`}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${mobileTab === 'palette' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+            }`}
         >
           Add Fields
         </button>
         <button
           onClick={() => setMobileTab('builder')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'builder' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-          }`}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${mobileTab === 'builder' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+            }`}
         >
           Form Builder ({fields.length})
         </button>
         <button
           onClick={() => setMobileTab('preview')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'preview' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-          }`}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${mobileTab === 'preview' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+            }`}
         >
           Live Preview
         </button>
@@ -341,11 +334,10 @@ export const FormBuilderPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT COLUMN — FIELD TYPES PALETTE */}
         <div
-          className={`lg:col-span-3 space-y-4 ${
-            mobileTab === 'palette' ? 'block' : 'hidden lg:block'
-          }`}
+          className={`lg:col-span-3 space-y-4 ${mobileTab === 'palette' ? 'block' : 'hidden lg:block'
+            }`}
         >
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 shadow-2xl flex flex-col h-[calc(100vh-260px)] space-y-4">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 shadow-2xl flex flex-col h-[calc(100vh-220px)] space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
                 Available Field Types
@@ -413,9 +405,8 @@ export const FormBuilderPage: React.FC = () => {
 
         {/* CENTER COLUMN — FORM BUILDER FIELD LIST */}
         <div
-          className={`lg:col-span-5 space-y-4 ${
-            mobileTab === 'builder' ? 'block' : 'hidden lg:block'
-          }`}
+          className={`lg:col-span-5 space-y-4 ${mobileTab === 'builder' ? 'block' : 'hidden lg:block'
+            }`}
         >
           <div
             onDragOver={(e) => {
@@ -432,235 +423,188 @@ export const FormBuilderPage: React.FC = () => {
                 if (def) handleAddField(def);
               }
             }}
-            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl flex flex-col h-[calc(100vh-260px)] space-y-4"
+            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl flex flex-col h-[calc(100vh-220px)] space-y-4"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
               <div className="flex items-center space-x-2">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Form Structure
+                  Form Schema Canvas
                 </h2>
-                <span className="text-[11px] font-medium text-slate-400">({fields.length} Fields)</span>
+                <span className="bg-indigo-500/10 text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/20">
+                  {fields.length} Active
+                </span>
               </div>
-              <span className="text-[10px] text-slate-500">Click & edit or drag to arrange</span>
+              <span className="text-[10px] text-slate-500">Drag to reorder</span>
             </div>
 
-            {/* EMPTY STATE */}
+            {/* Field Canvas List */}
             {fields.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/30 text-center p-6 space-y-3">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400 shadow-inner">
+              <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-xl bg-slate-900/30 p-8 text-center space-y-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                   <Sparkles className="h-6 w-6" />
                 </div>
                 <h3 className="text-sm font-bold text-slate-200">No fields added yet</h3>
-                <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                  Build your category form by selecting a field type from the left panel.
+                <p className="text-xs text-slate-500 max-w-xs">
+                  Click or drag input types from the left palette to start building your dynamic form schema.
                 </p>
-                <Button
-                  onClick={() => {
-                    const firstType = FIELD_TYPES[0];
-                    if (firstType) handleAddField(firstType);
-                  }}
-                  size="sm"
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold text-xs mt-2 shadow-lg shadow-indigo-600/20"
-                >
-                  + Add Your First Field
-                </Button>
               </div>
             ) : (
-              <div className="space-y-3 flex-1 overflow-y-auto pr-1">
-                {fields.map((field, idx) => (
-                  <div
-                    key={field.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, idx)}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    onDrop={(e) => handleDrop(e, idx)}
-                    onDragEnd={handleDragEnd}
-                    className={`group relative rounded-2xl border p-4 shadow-lg transition-all flex flex-col space-y-3 cursor-grab active:cursor-grabbing ${
-                      dragOverIndex === idx
-                        ? 'border-indigo-500 bg-indigo-500/15 ring-2 ring-indigo-500/30 scale-[1.01]'
-                        : field.enabled !== false
-                        ? 'border-slate-800 bg-slate-900/80 hover:border-slate-700'
-                        : 'border-slate-900 bg-slate-950/50 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      {/* Left: Drag Handle (GripVertical) + Order buttons & Field Label */}
-                      <div className="flex items-center space-x-2.5">
-                        <div className="flex items-center space-x-1">
-                          <GripVertical className="h-4 w-4 text-slate-500 group-hover:text-indigo-400 shrink-0 cursor-grab" />
-                          <div className="flex flex-col space-y-0.5">
-                            <button
-                              onClick={() => handleMoveField(idx, 'up')}
-                              disabled={idx === 0}
-                              className="text-slate-600 hover:text-slate-300 disabled:opacity-20"
-                              title="Move Up"
-                            >
-                              <ArrowUp className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleMoveField(idx, 'down')}
-                              disabled={idx === fields.length - 1}
-                              className="text-slate-600 hover:text-slate-300 disabled:opacity-20"
-                              title="Move Down"
-                            >
-                              <ArrowDown className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                {fields.map((field, index) => {
+                  const typeDef = FIELD_TYPES.find((t) => t.type === field.type);
+                  const Icon = typeDef?.icon || Type;
 
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm font-bold text-slate-100">{field.label}</span>
-                            {field.required && (
-                              <span className="text-[10px] font-semibold text-rose-300 bg-rose-500/10 border border-rose-400/20 px-2 py-0.5 rounded-full">
-                                Required
+                  return (
+                    <div
+                      key={field.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={() => {
+                        setDraggedIndex(null);
+                        setDragOverIndex(null);
+                      }}
+                      className={`group relative rounded-xl border transition-all p-3.5 bg-slate-900/80 hover:bg-slate-900 ${dragOverIndex === index
+                          ? 'border-indigo-500 bg-indigo-500/10 ring-2 ring-indigo-500/30'
+                          : 'border-slate-800 hover:border-slate-700'
+                        }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        {/* Drag Handle & Info */}
+                        <div className="flex items-start space-x-3 flex-1 min-w-0">
+                          <button
+                            type="button"
+                            className="mt-1 text-slate-600 group-hover:text-slate-400 cursor-grab active:cursor-grabbing p-0.5"
+                            title="Drag to reorder"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </button>
+
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 border border-slate-800 shrink-0 text-indigo-400">
+                            <Icon className="h-4.5 w-4.5" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center space-x-2">
+                              <h4 className="text-xs font-bold text-slate-100 truncate">
+                                {field.label}
+                              </h4>
+                              {field.required && (
+                                <span className="text-[10px] text-rose-400 font-semibold bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/20">
+                                  Required
+                                </span>
+                              )}
+                              {field.width === 'half' && (
+                                <span className="text-[10px] text-indigo-400 font-semibold bg-indigo-500/10 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                                  Half Width
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                                {field.name}
                               </span>
-                            )}
+                              <span className="text-[10px] text-slate-500 uppercase font-mono">
+                                • {field.type}
+                              </span>
+                            </div>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-500">
-                            internal_name: {field.name}
-                          </span>
                         </div>
-                      </div>
 
-                      {/* Right: Type Badge & Enable switch */}
-                      <div className="flex items-center space-x-2">
-                        {/* Width Badge Toggle */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const currentHalf = field.width === 'half' || (!field.width && !['textarea', 'address', 'file', 'image', 'multiselect'].includes(field.type));
-                            updateField(category.id, field.id, { width: currentHalf ? 'full' : 'half' });
-                          }}
-                          title="Click to toggle Field Width (Half vs Full)"
-                          className="text-[10px] font-mono font-semibold text-slate-400 bg-slate-800 hover:text-slate-200 px-2 py-0.5 rounded border border-slate-700 transition-colors"
-                        >
-                          {(field.width === 'half' || (!field.width && !['textarea', 'address', 'file', 'image', 'multiselect'].includes(field.type))) ? '50% Row' : '100% Row'}
-                        </button>
-
-                        <span className="text-[10px] font-mono font-semibold uppercase text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                          {field.type}
-                        </span>
-
-                        <button
-                          onClick={() => updateField(category.id, field.id, { enabled: !(field.enabled ?? true) })}
-                          title={field.enabled !== false ? 'Enabled' : 'Disabled'}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                            field.enabled !== false ? 'bg-emerald-600' : 'bg-slate-800'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${
-                              field.enabled !== false ? 'translate-x-4' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
+                        {/* Actions Toolbar */}
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button
+                            onClick={() => handleMoveField(index, 'up')}
+                            disabled={index === 0}
+                            className="p-1 text-slate-500 hover:text-slate-200 disabled:opacity-30 transition-colors"
+                            title="Move Up"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleMoveField(index, 'down')}
+                            disabled={index === fields.length - 1}
+                            className="p-1 text-slate-500 hover:text-slate-200 disabled:opacity-30 transition-colors"
+                            title="Move Down"
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setEditingField(field)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
+                            title="Edit Configuration"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => duplicateField(category.id, field.id)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
+                            title="Duplicate Field"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeletingFieldId(field.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                            title="Delete Field"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-
-                    {/* Currency Dropdown Field Inline Preview */}
-                    {field.type === 'currency' && (
-                      <div className="my-2.5 flex rounded-lg border border-slate-800 bg-slate-950 overflow-hidden text-[11px]">
-                        <div className="flex items-center px-2 py-1 bg-slate-900 border-r border-slate-800 text-indigo-400 font-semibold space-x-1">
-                          <span>{field.currencySymbol || '$'}</span>
-                          <span className="text-[9px] text-slate-400">▼ (USD, EUR, GBP, ETH, SOL)</span>
-                        </div>
-                        <div className="px-2.5 py-1 text-slate-500 italic flex-1">
-                          {field.placeholder || '0.00'}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Card Footer Actions */}
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                      <div className="text-[11px] text-slate-400 truncate max-w-[200px]">
-                        {field.placeholder || field.description || 'No placeholder configured'}
-                      </div>
-
-                      <div className="flex items-center space-x-1">
-                        <button
-                          onClick={() => setEditingField(field)}
-                          className="flex items-center space-x-1 px-2 py-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                          <span>Edit</span>
-                        </button>
-
-                        <button
-                          onClick={() => duplicateField(category.id, field.id)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                          title="Duplicate"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </button>
-
-                        <button
-                          onClick={() => setDeletingFieldId(field.id)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN — LIVE DYNAMIC PREVIEW */}
+        {/* RIGHT COLUMN — LIVE PREVIEW */}
         <div
-          className={`lg:col-span-4 ${
-            mobileTab === 'preview' ? 'block' : 'hidden lg:block'
-          }`}
+          className={`lg:col-span-4 space-y-4 ${mobileTab === 'preview' ? 'block' : 'hidden lg:block'
+            }`}
         >
-          <div className="sticky top-20">
-            <LiveFormPreview
-              title={category.title}
-              description={category.description}
-              fields={fields}
-              onReorder={(newFields) => {
-                reorderFields(category.id, newFields);
-                toast.success('Fields reordered');
-              }}
-            />
-          </div>
+          <LiveFormPreview
+            title={category.title || category.name}
+            description={category.description || ''}
+            fields={fields}
+            onReorder={(reordered) => reorderFields(category.id, reordered)}
+          />
         </div>
       </div>
 
-      {/* FIELD EDITOR DRAWER */}
-      <FieldEditorDrawer
-        field={editingField}
-        isOpen={!!editingField}
-        onClose={() => setEditingField(null)}
-        onSave={(updatedField) => {
-          updateField(category.id, updatedField.id, updatedField);
-          toast.success(`Updated "${updatedField.label}" configuration.`);
-        }}
-      />
+      {/* FIELD CONFIGURATION DRAWER */}
+      {editingField && (
+        <FieldEditorDrawer
+          field={editingField}
+          isOpen={Boolean(editingField)}
+          onClose={() => setEditingField(null)}
+          onSave={(updated) => {
+            updateField(category.id, editingField.id, updated);
+            setEditingField(null);
+            toast.success(`Updated ${updated.label} configuration`);
+          }}
+        />
+      )}
 
-      {/* DELETE FIELD CONFIRMATION MODAL */}
+      {/* CONFIRM DELETE MODAL */}
       {deletingFieldId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <div className="flex items-center space-x-3 text-rose-300">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 border border-rose-500/20">
-                <AlertTriangle className="h-5 w-5 text-rose-300" />
-              </div>
-              <h3 className="text-base font-bold text-slate-100">Delete Field?</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+              <Trash2 className="h-6 w-6" />
             </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Are you sure you want to remove this field from the category form?
+            <h3 className="text-base font-bold text-slate-100">Delete Field?</h3>
+            <p className="text-xs text-slate-400">
+              Are you sure you want to remove this input from the category schema?
             </p>
-
-            <div className="flex items-center justify-end space-x-3 pt-3">
+            <div className="flex items-center justify-center space-x-3 pt-2">
               <Button
-                variant="ghost"
                 onClick={() => setDeletingFieldId(null)}
-                className="text-xs font-semibold text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-xl px-4 h-9"
+                variant="ghost"
+                className="text-xs text-slate-400 hover:text-slate-200"
               >
                 Cancel
               </Button>
@@ -668,49 +612,48 @@ export const FormBuilderPage: React.FC = () => {
                 onClick={() => {
                   deleteField(category.id, deletingFieldId);
                   setDeletingFieldId(null);
-                  toast.success('Field deleted.');
+                  toast.success('Field deleted');
                 }}
-                className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-xl"
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl"
               >
-                Delete Field
+                Delete
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* PUBLISH FORM CONFIRMATION MODAL */}
+      {/* CONFIRM PUBLISH MODAL */}
       {isPublishModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <div className="space-y-1">
-              <h3 className="text-lg font-bold text-slate-100">Publish Category Form</h3>
-              <p className="text-sm font-semibold text-indigo-400">{category.title}</p>
-            </div>
-
-            <div className="rounded-xl bg-slate-950 p-4 border border-slate-800 text-xs text-slate-300 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Configured Fields:</span>
-                <span className="font-bold text-white">{fields.length} fields</span>
+            <div className="flex items-center space-x-3 border-b border-slate-800 pb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <Send className="h-5 w-5" />
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed pt-1 border-t border-slate-800">
-                This will make the current form configuration the active configuration for this category.
-              </p>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">Publish Category Form Schema</h3>
+                <p className="text-[11px] text-slate-400">{category.title || category.name}</p>
+              </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-800">
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Publishing will activate status for this category schema with {fields.length} input fields.
+            </p>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
               <Button
-                variant="ghost"
                 onClick={() => setIsPublishModalOpen(false)}
-                className="text-xs font-semibold text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-xl px-4 h-9"
+                variant="ghost"
+                className="text-xs text-slate-400 hover:text-slate-200"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleConfirmPublish}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl px-4"
+                className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs rounded-xl px-5"
               >
-                Publish Form
+                Publish Now
               </Button>
             </div>
           </div>
@@ -719,3 +662,5 @@ export const FormBuilderPage: React.FC = () => {
     </div>
   );
 };
+
+export default FormBuilderPage;

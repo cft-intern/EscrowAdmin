@@ -1,51 +1,120 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Eye, EyeOff, Lock, AlertCircle, KeyRound, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import adminService from '@/services/adminService';
 import { useCategory } from '@/context/CategoryContext';
+import { useAppDispatch } from '@/hooks/redux';
+import { setTokens } from '@/store/slices/authSlice';
 import toast from 'react-hot-toast';
 
-export const AdminSignupPage: React.FC = () => {
+export const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { signup } = useCategory();
 
-  const [email, setEmail] = useState('admin@example.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setErrorMessage('');
 
-    if (!email || !email.includes('@')) {
-      setErrorMessage('Please enter a valid email address.');
+    // Extract values from state or DOM fallback for browser autofill
+    const domEmail = (document.querySelector('input[type="email"]') as HTMLInputElement)?.value || '';
+    const domPassword = (document.querySelector('input[type="password"]') as HTMLInputElement)?.value || '';
+
+    const activeEmail = (email || domEmail).trim();
+    const activePassword = (password || domPassword).trim();
+
+    if (!activeEmail) {
+      setErrorMessage('Please enter your email address.');
+      toast.error('Please enter your email address.');
       return;
     }
-    if (!password) {
-      setErrorMessage('Please enter a password.');
+
+    if (!activePassword) {
+      setErrorMessage('Please enter your password.');
+      toast.error('Please enter your password.');
       return;
     }
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
-      const nameFromEmail = email.split('@')[0] || 'Admin';
-      const formattedName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
-      signup(formattedName, email);
-      toast.success('Admin account created successfully!');
+    try {
+      console.log('API BASE URL:', import.meta.env.VITE_API_BASE_URL);
+      console.log('AUTH REQUEST: POST /admin/authenticate', { email: activeEmail });
+
+      // Call authentication API
+      const response = await adminService.authenticate({ email: activeEmail, password: activePassword });
+      console.log('AUTH RESPONSE:', response);
+
+      // Extract real token from response contract
+      const realAccessToken =
+        response?.token ||
+        response?.accessToken ||
+        response?.access_token ||
+        response?.data?.token ||
+        response?.data?.accessToken ||
+        response?.data?.access_token;
+
+      const realRefreshToken =
+        response?.refreshToken ||
+        response?.refresh_token ||
+        response?.data?.refreshToken ||
+        response?.data?.refresh_token ||
+        '';
+
+      if (!realAccessToken) {
+        const errorMsg = response?.message || 'Authentication failed: No access token returned from server.';
+        setErrorMessage(errorMsg);
+        toast.error(errorMsg);
+        return;
+      }
+
+      // Update Redux state with real backend tokens
+      dispatch(
+        setTokens({
+          accessToken: realAccessToken,
+          refreshToken: realRefreshToken,
+        })
+      );
+
+      // Sync user session in CategoryContext
+      signup('Admin', activeEmail);
+
+      toast.success('Admin authentication successful!');
       navigate('/categories');
-    }, 800);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      const rawMsg = error.response?.data?.message || error.message;
+      const msg = Array.isArray(rawMsg)
+        ? rawMsg.join(', ')
+        : typeof rawMsg === 'string'
+        ? rawMsg
+        : typeof rawMsg === 'object' && rawMsg !== null
+        ? JSON.stringify(rawMsg)
+        : 'Login failed. Please check your credentials.';
+
+      setErrorMessage(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 md:p-6 relative overflow-hidden font-sans">
-      {/* Dynamic Background Glow Effects */}
+      {/* Background Glows */}
       <div className="absolute -top-32 -right-32 w-96 h-96 bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-violet-600/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl h-96 bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
@@ -58,21 +127,21 @@ export const AdminSignupPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-100 to-indigo-300">
-              ESCROW ADMIN
+              ESCROW ADMIN PORTAL
             </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Create your administrator account to manage escrow category forms.
+            <p className="text-xs text-slate-400 mt-1">
+              Sign in to manage categories, dynamic form schemas, and platform configuration.
             </p>
           </div>
         </div>
 
-        {/* Signup Form Card */}
+        {/* Login Form Card */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/90 backdrop-blur-xl p-7 shadow-2xl space-y-5">
-          <div className="border-b border-slate-800 pb-4">
-            <h2 className="text-lg font-bold text-slate-100">Create Admin Account</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Fill in the details below to get started.
-            </p>
+          <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-100">Admin Sign In</h2>
+            </div>
+            <KeyRound className="h-5 w-5 text-indigo-400" />
           </div>
 
           {errorMessage && (
@@ -83,9 +152,9 @@ export const AdminSignupPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email */}
+            {/* Email Address */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-300">Email Address</Label>
+              <Label className="text-xs font-medium text-slate-300">Admin Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
@@ -125,16 +194,16 @@ export const AdminSignupPage: React.FC = () => {
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full h-11 text-sm font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 rounded-xl transition-all mt-2"
+              className="w-full h-11 text-sm font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 rounded-xl transition-all mt-2 cursor-pointer"
               disabled={isLoading}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center">
                   <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Creating Account...
+                  Authenticating...
                 </span>
               ) : (
-                'Create Admin Account'
+                'Sign In to Admin Panel'
               )}
             </Button>
           </form>
@@ -143,3 +212,6 @@ export const AdminSignupPage: React.FC = () => {
     </div>
   );
 };
+
+export const AdminSignupPage = AdminLoginPage;
+export default AdminLoginPage;

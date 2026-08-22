@@ -5,6 +5,8 @@ import { Menu, LogOut, ChevronRight, User, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EscrowSidebar } from '@/components/admin/EscrowSidebar';
 import { useCategory } from '@/context/CategoryContext';
+import { useAppDispatch } from '@/hooks/redux';
+import { logout as logoutSlice } from '@/store/slices/authSlice';
 import { cn } from '@/utils';
 import {
   DropdownMenu,
@@ -19,13 +21,15 @@ export function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { adminUser, logout, activeCategoryId, getCategory } = useCategory();
 
   const activeCategory = activeCategoryId ? getCategory(activeCategoryId) : undefined;
 
   const handleLogout = () => {
+    dispatch(logoutSlice());
     logout();
-    navigate('/signup');
+    navigate('/login');
   };
 
   // Derive breadcrumbs based on route

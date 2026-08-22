@@ -160,16 +160,23 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onToggleSidebar }) => 
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/admin/users')}>
+            <DropdownMenuItem onClick={() => navigate('/admin/profile')}>
               <User className="mr-2 h-4 w-4" />
               <span>Admin Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/admin/settings')}>
+            <DropdownMenuItem onClick={() => navigate('/admin/profile')}>
               <Settings className="mr-2 h-4 w-4" />
-              <span>Platform Settings</span>
+              <span>Account Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/admin/login')} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              onClick={() => {
+                const storageKey = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
+                localStorage.removeItem(storageKey);
+                navigate('/login');
+              }}
+              className="text-destructive focus:text-destructive"
+            >
               <LogOut className="mr-2 h-4 w-4" />
               <span>Sign Out</span>
             </DropdownMenuItem>

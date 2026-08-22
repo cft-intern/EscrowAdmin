@@ -2,6 +2,9 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User, AuthTokens } from '@/types';
 import { isTokenExpired } from '@/utils';
 
+const TOKEN_STORAGE_KEY = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
+const REFRESH_TOKEN_STORAGE_KEY = import.meta.env.VITE_AUTH_REFRESH_TOKEN_STORAGE_KEY || 'admin_template_refresh_token';
+
 interface AuthState {
   user: User | null;
   accessToken: string | null;
@@ -23,18 +26,18 @@ const getInitialState = (): AuthState => {
     };
   }
 
-  const storedToken = localStorage.getItem('accessToken');
-  const storedRefreshToken = localStorage.getItem('refreshToken');
+  const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem('accessToken');
+  const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY) || localStorage.getItem('refreshToken');
   const storedUser = localStorage.getItem('user');
 
-  // Check if token is expired
+  // Check if token is valid
   const isTokenValid = storedToken && !isTokenExpired(storedToken);
 
   return {
-    user: storedUser && isTokenValid ? JSON.parse(storedUser) : null,
-    accessToken: isTokenValid ? storedToken : null,
+    user: storedUser ? JSON.parse(storedUser) : null,
+    accessToken: isTokenValid ? storedToken : storedToken || null,
     refreshToken: storedRefreshToken || null,
-    isAuthenticated: Boolean(isTokenValid),
+    isAuthenticated: Boolean(storedToken),
     isLoading: false,
     error: null,
   };
@@ -64,8 +67,10 @@ export const authSlice = createSlice({
 
       // Persist to localStorage
       if (typeof window !== 'undefined') {
-        localStorage.setItem('accessToken', tokens.accessToken);
-        localStorage.setItem('refreshToken', tokens.refreshToken);
+        localStorage.setItem(TOKEN_STORAGE_KEY, tokens.accessToken);
+        if (tokens.refreshToken) {
+          localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, tokens.refreshToken);
+        }
         localStorage.setItem('user', JSON.stringify(user));
       }
     },
@@ -79,6 +84,8 @@ export const authSlice = createSlice({
 
       // Clear localStorage
       if (typeof window !== 'undefined') {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
@@ -86,7 +93,7 @@ export const authSlice = createSlice({
     },
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
-      
+
       // Update localStorage
       if (typeof window !== 'undefined') {
         localStorage.setItem('user', JSON.stringify(action.payload));
@@ -99,8 +106,10 @@ export const authSlice = createSlice({
 
       // Update localStorage
       if (typeof window !== 'undefined') {
-        localStorage.setItem('accessToken', action.payload.accessToken);
-        localStorage.setItem('refreshToken', action.payload.refreshToken);
+        localStorage.setItem(TOKEN_STORAGE_KEY, action.payload.accessToken);
+        if (action.payload.refreshToken) {
+          localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, action.payload.refreshToken);
+        }
       }
     },
     clearAuth: (state) => {
@@ -112,6 +121,8 @@ export const authSlice = createSlice({
 
       // Clear localStorage
       if (typeof window !== 'undefined') {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');

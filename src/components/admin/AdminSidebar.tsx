@@ -71,8 +71,8 @@ const navGroups: NavGroup[] = [
   {
     groupName: 'ADMINISTRATION',
     items: [
-      { name: 'Admin Users', href: '/admin/users', icon: UserCog },
-      { name: 'Activity', href: '/admin/activity', icon: History },
+      { name: 'Admin Profile', href: '/admin/profile', icon: UserCog },
+      { name: 'Categories', href: '/admin/categories', icon: FolderTree },
     ],
   },
 ];

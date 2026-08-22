@@ -4,20 +4,25 @@ import { store } from '@/store';
 import { clearAuth, setTokens } from '@/store/slices/authSlice';
 import { setNotification } from '@/store/slices/uiSlice';
 
+const getBaseUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    return envUrl.trim();
+  }
+  return 'https://staging-api-inburg.igamingadda.com';
+};
+
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: getBaseUrl(),
 });
 
 // Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
     const state = store.getState();
-    const token = state.auth.accessToken;
+    const storageKey = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
+    const token = state.auth.accessToken || (typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null);
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -38,30 +43,44 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
 
-    // Handle 401 errors (unauthorized)
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const requestUrl = originalRequest?.url || '';
+    const isAuthRequest =
+      requestUrl.includes('/admin/authenticate') ||
+      requestUrl.includes('/auth/login') ||
+      requestUrl.includes('/refresh');
+
+    // Handle 401 errors (unauthorized) ONLY for non-auth requests
+    if (error.response?.status === 401 && !isAuthRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
       const state = store.getState();
-      const refreshToken = state.auth.refreshToken;
+      const refreshStorageKey = import.meta.env.VITE_AUTH_REFRESH_TOKEN_STORAGE_KEY || 'admin_template_refresh_token';
+      const refreshToken = state.auth.refreshToken || (typeof window !== 'undefined' ? localStorage.getItem(refreshStorageKey) : null);
 
       if (refreshToken) {
         try {
-          const response = await axios.post('/api/auth/refresh', {
+          // Use configured apiClient so base URL is respected
+          const response = await apiClient.post('/api/auth/refresh', {
             refreshToken,
           });
 
-          const tokens: AuthTokens = response.data.data;
-          store.dispatch(setTokens(tokens));
+          const tokensData = response.data?.data || response.data;
+          const tokens: AuthTokens = {
+            accessToken: tokensData?.accessToken || tokensData?.token || tokensData?.access_token,
+            refreshToken: tokensData?.refreshToken || tokensData?.refresh_token || refreshToken,
+          };
 
-          // Retry the original request with new token
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
+          if (tokens.accessToken) {
+            store.dispatch(setTokens(tokens));
+
+            // Retry original request with new token
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
+            }
+
+            return apiClient(originalRequest);
           }
-
-          return apiClient(originalRequest);
         } catch (refreshError) {
-          // Refresh failed, logout user
           store.dispatch(clearAuth());
           store.dispatch(
             setNotification({
@@ -70,16 +89,19 @@ apiClient.interceptors.response.use(
               message: 'Please log in again.',
             })
           );
-          
-          // Redirect to login page
+
+          const storageKey = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
           if (typeof window !== 'undefined') {
+            localStorage.removeItem(storageKey);
+            localStorage.removeItem(refreshStorageKey);
             window.location.href = '/login';
           }
         }
       } else {
-        // No refresh token, logout user
         store.dispatch(clearAuth());
+        const storageKey = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
         if (typeof window !== 'undefined') {
+          localStorage.removeItem(storageKey);
           window.location.href = '/login';
         }
       }
@@ -107,17 +129,22 @@ apiClient.interceptors.response.use(
       );
     }
 
-    // Handle client errors (4xx) except 401 which is handled above
+    // Handle client errors (4xx) except 401 which is handled above or on auth requests
     if (
       error.response?.status &&
       error.response.status >= 400 &&
       error.response.status < 500 &&
-      error.response.status !== 401
+      !isAuthRequest
     ) {
-      const errorMessage = 
-        (error.response.data as ApiResponse<any>)?.message || 
-        'Request failed. Please check your input and try again.';
-      
+      const rawMsg = (error.response.data as ApiResponse<any>)?.message;
+      const errorMessage = Array.isArray(rawMsg)
+        ? rawMsg.join(', ')
+        : typeof rawMsg === 'string'
+        ? rawMsg
+        : typeof rawMsg === 'object' && rawMsg !== null
+        ? JSON.stringify(rawMsg)
+        : 'Request failed. Please check your input and try again.';
+
       store.dispatch(
         setNotification({
           type: 'error',
@@ -138,28 +165,28 @@ const retryRequest = async (
   delay: number = 1000
 ): Promise<AxiosResponse> => {
   let lastError: AxiosError;
-  
+
   for (let i = 0; i <= maxRetries; i++) {
     try {
       return await requestFn();
     } catch (error) {
       lastError = error as AxiosError;
-      
+
       // Don't retry on 4xx errors (client errors)
       if (lastError.response?.status && lastError.response.status >= 400 && lastError.response.status < 500) {
         throw lastError;
       }
-      
+
       // Don't retry on the last attempt
       if (i === maxRetries) {
         throw lastError;
       }
-      
+
       // Wait before retrying with exponential backoff
       await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
     }
   }
-  
+
   throw lastError!;
 };
 
@@ -202,5 +229,4 @@ export const api = new ApiClient();
 
 // Export axios instance for direct use if needed
 export { apiClient };
-
-export default api;
+export default apiClient;
