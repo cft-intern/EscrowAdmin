@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Shield, Layers, FormInput, LogOut, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { Shield, Layers, FormInput, LogOut, ChevronLeft, ChevronRight, User, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils';
 import { useCategory } from '@/context/CategoryContext';
@@ -43,13 +43,13 @@ export const EscrowSidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
         {/* Sidebar Header / Branding */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-slate-800/80 bg-slate-950/60">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30 ring-1 ring-white/20">
-              <Shield className="h-5 w-5" />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 shadow-md">
+              <Shield className="h-4.5 w-4.5" />
             </div>
             {isOpen && (
               <div className="flex flex-col">
-                <span className="font-extrabold text-sm tracking-wider text-white">ESCROW ADMIN</span>
-                <span className="text-[10px] font-medium text-indigo-400 tracking-tight">Form Manager</span>
+                <span className="font-bold text-sm tracking-tight text-slate-100">Admin of Escrow</span>
+                <span className="text-[10px] font-medium text-indigo-400 tracking-tight">Escrow Management</span>
               </div>
             )}
           </div>

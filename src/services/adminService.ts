@@ -33,25 +33,13 @@ export interface ChangePasswordPayload {
 }
 
 export const adminService = {
-  // POST /admin/authenticate (Sends email & password in payload)
+  // POST /auth/login (Confirmed admin login endpoint)
   async authenticate(payload: AuthenticatePayload) {
-    try {
-      const response = await apiClient.post('/admin/authenticate', {
-        email: payload.email,
-        password: payload.password,
-      });
-      return response.data;
-    } catch (error: any) {
-      // Fallback to /auth/login if /admin/authenticate yields 404
-      if (error?.response?.status === 404) {
-        const fallbackResponse = await apiClient.post('/auth/login', {
-          email: payload.email,
-          password: payload.password,
-        });
-        return fallbackResponse.data;
-      }
-      throw error;
-    }
+    const response = await apiClient.post('/auth/login', {
+      email: payload.email,
+      password: payload.password,
+    });
+    return response.data;
   },
 
   // GET /admin

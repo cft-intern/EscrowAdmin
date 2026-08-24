@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FormFieldConfig, FieldType, FormOption } from '@/types/escrowTypes';
+import { FormFieldConfig, FieldType, FormOption, mapFieldTypeToApi, RESERVED_FIELD_KEYS, sanitizeFieldKey } from '@/types/escrowTypes';
 import { X, Plus, Trash2, GripVertical, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,7 @@ interface FieldEditorDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedField: FormFieldConfig) => void;
+  existingKeys?: string[];
 }
 
 export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
@@ -24,6 +25,7 @@ export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
   isOpen,
   onClose,
   onSave,
+  existingKeys = [],
 }) => {
   const [formData, setFormData] = useState<Partial<FormFieldConfig>>({});
   const [options, setOptions] = useState<FormOption[]>([]);
@@ -43,12 +45,12 @@ export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
   };
 
   const handleLabelChange = (val: string) => {
-    // Automatically generate clean internal variable name if name is empty or matches previous label slug
-    const autoName = val.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const autoKey = val.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     setFormData((prev) => ({
       ...prev,
       label: val,
-      name: prev.name ? prev.name : autoName,
+      key: prev.key ? prev.key : autoKey,
+      name: prev.name ? prev.name : autoKey,
     }));
   };
 
@@ -81,15 +83,38 @@ export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
     );
   };
 
+  const cleanedKey = sanitizeFieldKey(formData.key || formData.name || formData.label || '');
+  const isReserved = RESERVED_FIELD_KEYS.has(cleanedKey);
+  const isDuplicate = Boolean(
+    existingKeys &&
+      existingKeys
+        .filter((k) => k?.toLowerCase() !== field?.key?.toLowerCase())
+        .map((k) => k?.toLowerCase())
+        .includes(cleanedKey)
+  );
+
+  let keyError: string | null = null;
+  if (isReserved) {
+    keyError = `Field key "${cleanedKey}" is reserved. Please choose another key (e.g. ${cleanedKey}_field).`;
+  } else if (isDuplicate) {
+    keyError = `Field key "${cleanedKey}" is already used by another field.`;
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.label?.trim()) return;
+    if (!formData.label?.trim() || keyError) return;
+
+    const fieldKey = cleanedKey;
+    const selectedType = mapFieldTypeToApi(formData.fieldType as string, formData.type as string);
 
     const updatedField: FormFieldConfig = {
       ...(field as FormFieldConfig),
       ...(formData as FormFieldConfig),
       label: formData.label.trim(),
-      name: (formData.name || formData.label).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+      key: fieldKey,
+      name: fieldKey,
+      fieldType: selectedType,
+      type: selectedType.toLowerCase() as FieldType,
       options: options.length > 0 ? options : undefined,
     };
 
@@ -121,12 +146,27 @@ export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           {/* Scrollable Form Body */}
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
-            {/* Field Type Badge */}
-            <div className="flex items-center justify-between rounded-xl bg-slate-950 p-3 border border-slate-800">
-              <span className="text-xs font-semibold text-slate-400">Field Type</span>
-              <span className="text-xs font-mono font-bold text-indigo-400 uppercase bg-indigo-500/10 px-2.5 py-1 rounded-md border border-indigo-500/20">
-                {fieldType}
-              </span>
+            {/* Field Type Select */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-300">Field Type *</Label>
+              <Select
+                value={String(formData.fieldType || formData.type || 'STRING').toUpperCase()}
+                onValueChange={(val) => {
+                  handleChange('fieldType', val);
+                  handleChange('type', val.toLowerCase());
+                }}
+              >
+                <SelectTrigger className="w-full bg-slate-950 border-slate-800 text-slate-100 font-mono text-xs rounded-xl h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl shadow-2xl z-[150] max-h-60 overflow-y-auto">
+                  {['STRING', 'NUMBER', 'BOOLEAN', 'DATE', 'FILE', 'IMAGE', 'DROPDOWN', 'RADIO', 'TEXTAREA', 'VIDEO', 'LOCATION', 'DOCUMENT', 'CHECKBOX'].map((t) => (
+                    <SelectItem key={t} value={t} className="text-xs font-mono cursor-pointer focus:bg-indigo-600 focus:text-white">
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Label */}
@@ -141,15 +181,28 @@ export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
               />
             </div>
 
-            {/* Internal Name */}
+            {/* Field Key */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-slate-300">Internal Name (Variable Identifier)</Label>
+              <Label className="text-xs font-semibold text-slate-300">Field Key (Unique Variable Key) *</Label>
               <Input
-                value={formData.name || ''}
-                onChange={(e) => handleChange('name', e.target.value)}
-                placeholder="project_name"
-                className="bg-slate-950 border-slate-800 font-mono text-indigo-300 text-xs rounded-xl h-10"
+                value={formData.key || formData.name || ''}
+                onChange={(e) => {
+                  const rawVal = e.target.value.toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+                  handleChange('key', rawVal);
+                  handleChange('name', rawVal);
+                }}
+                placeholder="e.g. project_name"
+                className={`bg-slate-950 font-mono text-indigo-300 text-xs rounded-xl h-10 ${
+                  keyError ? 'border-rose-500 ring-1 ring-rose-500 text-rose-300' : 'border-slate-800'
+                }`}
+                required
               />
+              {keyError && (
+                <p className="text-[11px] font-semibold text-rose-400 flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{keyError}</span>
+                </p>
+              )}
             </div>
 
             {/* Description */}
@@ -226,236 +279,311 @@ export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
               </div>
             </div>
 
-            {/* TYPE SPECIFIC CONFIGURATIONS */}
-
-            {/* TEXT & TEXTAREA */}
-            {(fieldType === 'text' || fieldType === 'textarea') && (
-              <div className="space-y-4 pt-2 border-t border-slate-800">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Text Validation</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Min Length</Label>
-                    <Input
-                      type="number"
-                      value={formData.minLength ?? ''}
-                      onChange={(e) => handleChange('minLength', parseInt(e.target.value) || undefined)}
-                      placeholder="0"
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Max Length</Label>
-                    <Input
-                      type="number"
-                      value={formData.maxLength ?? ''}
-                      onChange={(e) => handleChange('maxLength', parseInt(e.target.value) || undefined)}
-                      placeholder="100"
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                </div>
-                {fieldType === 'textarea' && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Rows</Label>
-                    <Input
-                      type="number"
-                      value={formData.rows ?? 4}
-                      onChange={(e) => handleChange('rows', parseInt(e.target.value) || 4)}
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* NUMBER */}
-            {fieldType === 'number' && (
-              <div className="space-y-4 pt-2 border-t border-slate-800">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Number Bounds</h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Min Value</Label>
-                    <Input
-                      type="number"
-                      value={formData.min ?? ''}
-                      onChange={(e) => handleChange('min', parseFloat(e.target.value))}
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Max Value</Label>
-                    <Input
-                      type="number"
-                      value={formData.max ?? ''}
-                      onChange={(e) => handleChange('max', parseFloat(e.target.value))}
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Step</Label>
-                    <Input
-                      type="number"
-                      value={formData.step ?? 1}
-                      onChange={(e) => handleChange('step', parseFloat(e.target.value) || 1)}
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* CURRENCY */}
-            {fieldType === 'currency' && (
-              <div className="space-y-4 pt-2 border-t border-slate-800">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Currency Options</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Currency Symbol</Label>
-                    <Select
-                      value={formData.currencySymbol || '$'}
-                      onValueChange={(sym) => handleChange('currencySymbol', sym)}
-                    >
-                      <SelectTrigger className="w-full bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-xl h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl shadow-2xl z-[150]">
-                        <SelectItem value="$" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">USD ($)</SelectItem>
-                        <SelectItem value="€" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">EUR (€)</SelectItem>
-                        <SelectItem value="£" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">GBP (£)</SelectItem>
-                        <SelectItem value="ETH" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">Ethereum (ETH)</SelectItem>
-                        <SelectItem value="SOL" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">Solana (SOL)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Min Amount</Label>
-                    <Input
-                      type="number"
-                      value={formData.minAmount ?? ''}
-                      onChange={(e) => handleChange('minAmount', parseFloat(e.target.value))}
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* OPTIONS MANAGEMENT (SELECT, MULTISELECT, RADIO) */}
-            {['select', 'multiselect', 'radio'].includes(fieldType) && (
-              <div className="space-y-4 pt-2 border-t border-slate-800">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Options</h3>
-                
-                <div className="flex gap-2">
-                  <Input
-                    value={newOptionLabel}
-                    onChange={(e) => setNewOptionLabel(e.target.value)}
-                    placeholder="Enter new option..."
-                    className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                  />
-                  <Button
+            {/* Target Role (Buyer / Seller / Both) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-300">Target Role / Form Assignment</Label>
+              <div className="grid grid-cols-3 gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                {[
+                  { id: 'both', label: 'Both Roles' },
+                  { id: 'buyer', label: 'Buyer Only' },
+                  { id: 'seller', label: 'Seller Only' },
+                ].map((role) => (
+                  <button
+                    key={role.id}
                     type="button"
-                    onClick={handleAddOption}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 px-3 rounded-xl"
+                    onClick={() => handleChange('targetRole', role.id)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+                      (formData.targetRole === role.id || (!formData.targetRole && role.id === 'both'))
+                        ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
                   >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
+                    {role.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {options.map((opt) => (
-                    <div key={opt.id} className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
-                      <GripVertical className="h-4 w-4 text-slate-600 shrink-0" />
-                      <input
-                        type="text"
-                        value={opt.label}
-                        onChange={(e) => handleOptionChange(opt.id, e.target.value)}
-                        className="flex-1 bg-transparent text-xs text-slate-100 focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveOption(opt.id)}
-                        className="text-slate-500 hover:text-rose-400"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+            {/* TYPE SPECIFIC CONFIGURATIONS */}
+            {(() => {
+              const fTypeUpper = String(formData.fieldType || formData.type || 'STRING').toUpperCase();
+
+              return (
+                <>
+                  {/* TEXT & TEXTAREA */}
+                  {(fTypeUpper === 'STRING' || fTypeUpper === 'TEXTAREA' || fieldType === 'text' || fieldType === 'textarea') && (
+                    <div className="space-y-4 pt-2 border-t border-slate-800">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">String & Textarea Validation</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">Min Length</Label>
+                          <Input
+                            type="number"
+                            value={formData.minLength ?? ''}
+                            onChange={(e) => handleChange('minLength', parseInt(e.target.value) || undefined)}
+                            placeholder="e.g. 2"
+                            className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">Max Length</Label>
+                          <Input
+                            type="number"
+                            value={formData.maxLength ?? ''}
+                            onChange={(e) => handleChange('maxLength', parseInt(e.target.value) || undefined)}
+                            placeholder="e.g. 80"
+                            className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(formData.noWhitespaceOnly)}
+                            onChange={(e) => handleChange('noWhitespaceOnly', e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-900 text-indigo-600"
+                          />
+                          <span>No Whitespace Only</span>
+                        </label>
+                        <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(formData.alphabetsOnly)}
+                            onChange={(e) => handleChange('alphabetsOnly', e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-900 text-indigo-600"
+                          />
+                          <span>Alphabets Only</span>
+                        </label>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  )}
 
-            {/* WALLET */}
-            {fieldType === 'wallet' && (
-              <div className="space-y-3 pt-2 border-t border-slate-800">
-                <Label className="text-xs font-semibold text-slate-300">Supported Network</Label>
-                <Select
-                  value={formData.supportedNetwork || 'Ethereum (ERC-20)'}
-                  onValueChange={(net) => handleChange('supportedNetwork', net)}
-                >
-                  <SelectTrigger className="w-full bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-xl h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl shadow-2xl z-[150]">
-                    <SelectItem value="Ethereum (ERC-20)" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">Ethereum (ERC-20)</SelectItem>
-                    <SelectItem value="Polygon" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">Polygon</SelectItem>
-                    <SelectItem value="Solana" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">Solana</SelectItem>
-                    <SelectItem value="Arbitrum" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">Arbitrum</SelectItem>
-                    <SelectItem value="Multi-chain" className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">Multi-chain</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+                  {/* NUMBER */}
+                  {(fTypeUpper === 'NUMBER' || fieldType === 'number') && (
+                    <div className="space-y-4 pt-2 border-t border-slate-800">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Number Validation</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">Min Value</Label>
+                          <Input
+                            type="number"
+                            value={formData.minValue ?? formData.min ?? ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              handleChange('minValue', isNaN(val) ? undefined : val);
+                              handleChange('min', isNaN(val) ? undefined : val);
+                            }}
+                            placeholder="e.g. 1886"
+                            className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">Max Value</Label>
+                          <Input
+                            type="number"
+                            value={formData.maxValue ?? formData.max ?? ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              handleChange('maxValue', isNaN(val) ? undefined : val);
+                              handleChange('max', isNaN(val) ? undefined : val);
+                            }}
+                            placeholder="e.g. 2100"
+                            className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.allowDecimal ?? true}
+                            onChange={(e) => handleChange('allowDecimal', e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-900 text-indigo-600"
+                          />
+                          <span>Allow Decimal Values</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
 
-            {/* UPLOAD (FILE/IMAGE) */}
-            {(fieldType === 'file' || fieldType === 'image') && (
-              <div className="space-y-4 pt-2 border-t border-slate-800">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upload Limits</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Max File Size (MB)</Label>
-                    <Input
-                      type="number"
-                      value={formData.maxSizeMb ?? 25}
-                      onChange={(e) => handleChange('maxSizeMb', parseInt(e.target.value) || 25)}
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
+                  {/* UPLOAD (FILE, IMAGE, VIDEO, DOCUMENT) */}
+                  {(['FILE', 'IMAGE', 'VIDEO', 'DOCUMENT'].includes(fTypeUpper) || fieldType === 'file' || fieldType === 'image') && (
+                    <div className="space-y-4 pt-2 border-t border-slate-800">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upload Settings</h3>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-slate-300 font-semibold">Upload Type</Label>
+                        <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => handleChange('uploadType', 'SINGLE')}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                              formData.uploadType === 'SINGLE' || !formData.uploadType
+                                ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            Single File
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleChange('uploadType', 'MULTIPLE')}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                              formData.uploadType === 'MULTIPLE'
+                                ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            Multiple Files
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">Min Count</Label>
+                          <Input
+                            type="number"
+                            value={formData.minUploadCount ?? 1}
+                            onChange={(e) => handleChange('minUploadCount', parseInt(e.target.value) || 1)}
+                            className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">Max Count</Label>
+                          <Input
+                            type="number"
+                            value={formData.maxUploadCount ?? formData.maxFiles ?? 10}
+                            onChange={(e) => {
+                              const cnt = parseInt(e.target.value) || 10;
+                              handleChange('maxUploadCount', cnt);
+                              handleChange('maxFiles', cnt);
+                            }}
+                            className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">File Size (Bytes)</Label>
+                          <Input
+                            type="number"
+                            value={formData.fileSizeLimit ?? (formData.maxSizeMb ? formData.maxSizeMb * 1024 * 1024 : 10485760)}
+                            onChange={(e) => {
+                              const bytes = parseInt(e.target.value) || 10485760;
+                              handleChange('fileSizeLimit', bytes);
+                              handleChange('maxSizeMb', Math.round(bytes / (1024 * 1024)));
+                            }}
+                            className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OPTIONS MANAGEMENT (DROPDOWN, RADIO, SELECT, MULTISELECT) */}
+                  {(['DROPDOWN', 'RADIO'].includes(fTypeUpper) || ['select', 'multiselect', 'radio'].includes(fieldType)) && (
+                    <div className="space-y-4 pt-2 border-t border-slate-800">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Options ({options.length})</h3>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newOptionLabel}
+                          onChange={(e) => setNewOptionLabel(e.target.value)}
+                          placeholder="Enter option label..."
+                          className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                        />
+                        <Button
+                          type="button"
+                          onClick={handleAddOption}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-9 px-3 rounded-xl shrink-0"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {options.map((opt) => (
+                          <div key={opt.id} className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                            <GripVertical className="h-4 w-4 text-slate-600 shrink-0" />
+                            <input
+                              type="text"
+                              value={opt.label}
+                              onChange={(e) => handleOptionChange(opt.id, e.target.value)}
+                              placeholder="Label"
+                              className="flex-1 bg-transparent text-xs text-slate-100 focus:outline-none"
+                            />
+                            <span className="text-[10px] text-slate-500 font-mono">val: {opt.value}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveOption(opt.id)}
+                              className="text-slate-500 hover:text-rose-400"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CHECKBOX SETTINGS */}
+                  {(fTypeUpper === 'CHECKBOX' || fieldType === 'checkbox') && (
+                    <div className="space-y-3 pt-2 border-t border-slate-800">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Checkbox Details</h3>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-slate-300">Checkbox Label Text</Label>
+                        <Input
+                          value={formData.checkboxText || ''}
+                          onChange={(e) => handleChange('checkboxText', e.target.value)}
+                          placeholder="e.g. I agree to the terms and conditions"
+                          className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-slate-300">Optional Link URL</Label>
+                        <Input
+                          value={formData.checkboxLink || ''}
+                          onChange={(e) => handleChange('checkboxLink', e.target.value)}
+                          placeholder="https://example.com/terms"
+                          className="bg-slate-950 border-slate-800 font-mono text-indigo-300 text-xs rounded-xl h-9"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TOOLTIP & HELP CONTENT */}
+                  <div className="space-y-3 pt-2 border-t border-slate-800">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tooltip & Help Info</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-slate-300">Tooltip Type</Label>
+                        <Select
+                          value={formData.tooltipType || 'info'}
+                          onValueChange={(t) => handleChange('tooltipType', t)}
+                        >
+                          <SelectTrigger className="bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-xl h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl z-[150]">
+                            <SelectItem value="info" className="text-xs">Info Popover</SelectItem>
+                            <SelectItem value="warning" className="text-xs">Warning Note</SelectItem>
+                            <SelectItem value="help" className="text-xs">Help Icon</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-slate-300">Tooltip Content</Label>
+                        <Input
+                          value={formData.tooltipContent || formData.tooltip || ''}
+                          onChange={(e) => {
+                            handleChange('tooltipContent', e.target.value);
+                            handleChange('tooltip', e.target.value);
+                          }}
+                          placeholder="Guidance for user..."
+                          className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-300">Max Files</Label>
-                    <Input
-                      type="number"
-                      value={formData.maxFiles ?? 5}
-                      onChange={(e) => handleChange('maxFiles', parseInt(e.target.value) || 5)}
-                      className="bg-slate-950 border-slate-800 text-xs rounded-xl h-9"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ADDRESS Options */}
-            {fieldType === 'address' && (
-              <div className="space-y-3 pt-2 border-t border-slate-800">
-                <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.requireCountry ?? true}
-                    onChange={(e) => handleChange('requireCountry', e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-indigo-600"
-                  />
-                  <span>Require Country selection</span>
-                </label>
-                <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.requirePostalCode ?? true}
-                    onChange={(e) => handleChange('requirePostalCode', e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-indigo-600"
-                  />
-                  <span>Require Postal Code</span>
-                </label>
-              </div>
-            )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Modal Footer (Fixed Pinned Bottom) */}
@@ -468,7 +596,11 @@ export const FieldEditorDrawer: React.FC<FieldEditorDrawerProps> = ({
             >
               Cancel
             </Button>
-            <Button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl px-5 h-9 shadow-lg shadow-indigo-600/20">
+            <Button
+              type="submit"
+              disabled={Boolean(keyError)}
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold text-xs rounded-xl px-5 h-9 shadow-lg shadow-indigo-600/20"
+            >
               Save Field Configuration
             </Button>
           </div>

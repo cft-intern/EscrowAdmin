@@ -21,7 +21,197 @@ export type TransactionType =
 
 export type TransactionStatus = 'success' | 'pending' | 'failed';
 
+export const RESERVED_FIELD_KEYS = new Set([
+  'id',
+  'name',
+  'slug',
+  'description',
+  'icon',
+  'requiresshipping',
+  'requires_shipping',
+  'status',
+  'steps',
+  'fields',
+  'fieldgroups',
+  'field_groups',
+  'createdat',
+  'created_at',
+  'updatedat',
+  'updated_at',
+  'order',
+  'displayorder',
+  'display_order',
+  'escrowcount',
+  'escrows_count',
+  'escrow_count',
+  'action',
+  'actions',
+  'type',
+  'fieldtype',
+  'field_type',
+]);
+
+export const sanitizeFieldKey = (raw: string): string => {
+  return (raw || 'field')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+};
+
+export const generateUniqueFieldKey = (
+  label: string,
+  existingKeys: Set<string> | string[] = [],
+  reservedKeys: Set<string> = RESERVED_FIELD_KEYS,
+  currentKey?: string
+): string => {
+  const existingSet = new Set(
+    (Array.isArray(existingKeys) ? existingKeys : Array.from(existingKeys))
+      .map((k) => k?.toLowerCase())
+      .filter((k) => Boolean(k) && k !== currentKey?.toLowerCase())
+  );
+
+  const rawBase = sanitizeFieldKey(label);
+  let baseKey = rawBase || 'field';
+
+  // If baseKey matches a reserved category property (e.g. 'description', 'name', 'slug'),
+  // append '_field' so 'description' becomes 'description_field'
+  if (reservedKeys.has(baseKey)) {
+    baseKey = `${baseKey}_field`;
+  }
+
+  let candidate = baseKey;
+  let counter = 1;
+
+  while (reservedKeys.has(candidate) || existingSet.has(candidate)) {
+    candidate = `${baseKey}_${counter}`;
+    counter++;
+  }
+
+  return candidate;
+};
+
+export const BACKEND_FIELD_TYPES = {
+  STRING: 'STRING',
+  NUMBER: 'NUMBER',
+  BOOLEAN: 'BOOLEAN',
+  DATE: 'DATE',
+  FILE: 'FILE',
+  IMAGE: 'IMAGE',
+  DROPDOWN: 'DROPDOWN',
+  RADIO: 'RADIO',
+  TEXTAREA: 'TEXTAREA',
+  VIDEO: 'VIDEO',
+  LOCATION: 'LOCATION',
+  DOCUMENT: 'DOCUMENT',
+  CHECKBOX: 'CHECKBOX',
+} as const;
+
+export const VALID_FIELD_TYPES = [
+  'STRING',
+  'NUMBER',
+  'BOOLEAN',
+  'DATE',
+  'FILE',
+  'IMAGE',
+  'DROPDOWN',
+  'RADIO',
+  'TEXTAREA',
+  'VIDEO',
+  'LOCATION',
+  'DOCUMENT',
+  'CHECKBOX',
+] as const;
+
+export type SupportedFieldType = typeof VALID_FIELD_TYPES[number];
+
+export const mapFieldTypeToApi = (fieldType?: any, type?: any): SupportedFieldType => {
+  const rawFieldType = typeof fieldType === 'object' && fieldType !== null ? fieldType.value || fieldType.label : fieldType;
+  const rawType = typeof type === 'object' && type !== null ? type.value || type.label : type;
+  const input = String(rawFieldType || rawType || 'STRING').trim().toUpperCase();
+
+  switch (input) {
+    case 'STRING':
+    case 'TEXT':
+    case 'EMAIL':
+    case 'PHONE':
+    case 'URL':
+    case 'WALLET':
+    case 'ADDRESS_LINE':
+      return 'STRING';
+
+    case 'NUMBER':
+    case 'CURRENCY':
+    case 'NUMERIC':
+    case 'DECIMAL':
+    case 'FLOAT':
+    case 'INTEGER':
+      return 'NUMBER';
+
+    case 'BOOLEAN':
+    case 'TOGGLE':
+    case 'SWITCH':
+      return 'BOOLEAN';
+
+    case 'DATE':
+    case 'DATETIME':
+    case 'TIME':
+      return 'DATE';
+
+    case 'FILE':
+    case 'FILE_UPLOAD':
+    case 'ATTACHMENT':
+      return 'FILE';
+
+    case 'IMAGE':
+    case 'IMAGE_UPLOAD':
+    case 'PHOTO':
+      return 'IMAGE';
+
+    case 'DROPDOWN':
+    case 'SELECT':
+    case 'MULTISELECT':
+    case 'COMBOBOX':
+      return 'DROPDOWN';
+
+    case 'RADIO':
+    case 'RADIO_GROUP':
+      return 'RADIO';
+
+    case 'TEXTAREA':
+    case 'MULTILINE':
+    case 'LONGTEXT':
+      return 'TEXTAREA';
+
+    case 'VIDEO':
+    case 'VIDEO_UPLOAD':
+      return 'VIDEO';
+
+    case 'LOCATION':
+    case 'ADDRESS':
+    case 'MAP':
+    case 'GEOLOCATION':
+      return 'LOCATION';
+
+    case 'DOCUMENT':
+    case 'DOCUMENT_UPLOAD':
+    case 'PDF':
+      return 'DOCUMENT';
+
+    case 'CHECKBOX':
+    case 'CHECK_BOX':
+      return 'CHECKBOX';
+
+    default:
+      if ((VALID_FIELD_TYPES as readonly string[]).includes(input)) {
+        return input as SupportedFieldType;
+      }
+      return 'STRING';
+  }
+};
+
 export type FieldType =
+  | SupportedFieldType
   | 'text'
   | 'textarea'
   | 'number'
@@ -47,18 +237,36 @@ export interface FormOption {
   value: string;
 }
 
+export interface FieldGroup {
+  id: string;
+  name: string;
+  groupName?: string;
+  description?: string;
+  order?: number;
+  displayOrder?: number;
+  fields?: FormFieldConfig[];
+}
+
 export interface FormFieldConfig {
   id: string;
-  name: string; // internal variable name
+  name: string; // internal variable name (snake_case key)
+  key: string; // field key
   label: string;
   type: FieldType;
+  fieldType?: SupportedFieldType | string;
   required: boolean;
+  isRequired?: boolean;
   enabled?: boolean;
   placeholder?: string;
   description?: string;
+  tooltip?: string;
   defaultValue?: any;
   order?: number;
+  displayOrder?: number;
   width?: 'full' | 'half';
+  fieldsPerRow?: 1 | 2;
+  groupId?: string;
+  targetRole?: 'buyer' | 'seller' | 'both';
   options?: FormOption[];
   
   // Dynamic validation & type specific settings
@@ -67,12 +275,22 @@ export interface FormFieldConfig {
   step?: number;
   minLength?: number;
   maxLength?: number;
+  noWhitespaceOnly?: boolean;
+  alphabetsOnly?: boolean;
+  minValue?: number;
+  maxValue?: number;
+  allowDecimal?: boolean;
+  pattern?: string;
   rows?: number;
   minSelections?: number;
   maxSelections?: number;
   allowedTypes?: string[];
   maxSizeMb?: number;
   maxFiles?: number;
+  uploadType?: 'SINGLE' | 'MULTIPLE';
+  minUploadCount?: number;
+  maxUploadCount?: number;
+  fileSizeLimit?: number;
   currencySymbol?: string;
   minAmount?: number;
   maxAmount?: number;
@@ -82,18 +300,36 @@ export interface FormFieldConfig {
   minDate?: string;
   maxDate?: string;
   defaultChecked?: boolean;
+  checkboxText?: string;
+  checkboxLink?: string;
+  tooltipType?: string;
+  tooltipContent?: string;
+}
+
+export interface FormStep {
+  id: string;
+  name: string;
+  stepName?: string;
+  order: number;
+  displayOrder?: number;
+  description?: string;
+  fields: FormFieldConfig[];
+  fieldGroups?: FieldGroup[];
 }
 
 export interface Category {
   id: string;
   title: string;
   name: string;
+  slug?: string;
   description: string;
   icon: string;
-  status: 'active' | 'inactive';
+  requiresShipping?: boolean;
+  status: 'active' | 'inactive' | 'draft' | string;
   displayOrder?: number;
   escrowCount?: number;
   fields: FormFieldConfig[];
+  steps?: FormStep[];
   createdAt: string;
   updatedAt: string;
 }

@@ -51,27 +51,24 @@ export const AdminLoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      console.log('API BASE URL:', import.meta.env.VITE_API_BASE_URL);
-      console.log('AUTH REQUEST: POST /admin/authenticate', { email: activeEmail });
-
-      // Call authentication API
+      // Call authentication API (POST /auth/login)
       const response = await adminService.authenticate({ email: activeEmail, password: activePassword });
-      console.log('AUTH RESPONSE:', response);
 
-      // Extract real token from response contract
+      // Extract real token from response contract cleanly
+      const tokensData = response?.data ?? response;
       const realAccessToken =
-        response?.token ||
-        response?.accessToken ||
-        response?.access_token ||
-        response?.data?.token ||
-        response?.data?.accessToken ||
-        response?.data?.access_token;
+        tokensData?.accessToken ??
+        tokensData?.token ??
+        tokensData?.access_token ??
+        response?.accessToken ??
+        response?.token ??
+        response?.access_token;
 
       const realRefreshToken =
-        response?.refreshToken ||
-        response?.refresh_token ||
-        response?.data?.refreshToken ||
-        response?.data?.refresh_token ||
+        tokensData?.refreshToken ??
+        tokensData?.refresh_token ??
+        response?.refreshToken ??
+        response?.refresh_token ??
         '';
 
       if (!realAccessToken) {
@@ -95,8 +92,7 @@ export const AdminLoginPage: React.FC = () => {
       toast.success('Admin authentication successful!');
       navigate('/categories');
     } catch (error: any) {
-      console.error('Login error:', error);
-      const rawMsg = error.response?.data?.message || error.message;
+      const rawMsg = error?.response?.data?.message ?? error?.response?.data?.error ?? error?.message;
       const msg = Array.isArray(rawMsg)
         ? rawMsg.join(', ')
         : typeof rawMsg === 'string'

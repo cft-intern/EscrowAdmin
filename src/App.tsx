@@ -37,6 +37,8 @@ export function App() {
         <Route path="/" element={<Navigate to="/categories" replace />} />
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/categories/:id/builder" element={<FormBuilderPage />} />
+        <Route path="/form-builder/:domainId" element={<FormBuilderPage />} />
+        <Route path="/form-builder" element={<FormBuilderPage />} />
         <Route path="/builder" element={<FormBuilderPage />} />
         <Route path="/admin/form-builder" element={<FormBuilderPage />} />
         <Route path="/admin" element={<Navigate to="/categories" replace />} />

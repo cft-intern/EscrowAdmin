@@ -71,7 +71,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             </div>
             {isOpen && (
               <span className="ml-2 text-lg font-semibold">
-                Admin Template
+                Admin of Escrow
               </span>
             )}
           </div>

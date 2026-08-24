@@ -100,15 +100,20 @@ export const authSlice = createSlice({
       }
     },
     setTokens: (state, action: PayloadAction<AuthTokens>) => {
-      state.accessToken = action.payload.accessToken;
-      state.refreshToken = action.payload.refreshToken;
-      state.isAuthenticated = true;
+      const { accessToken, refreshToken } = action.payload;
+      state.accessToken = accessToken;
+      if (refreshToken) {
+        state.refreshToken = refreshToken;
+      }
+      state.isAuthenticated = Boolean(accessToken);
 
       // Update localStorage
       if (typeof window !== 'undefined') {
-        localStorage.setItem(TOKEN_STORAGE_KEY, action.payload.accessToken);
-        if (action.payload.refreshToken) {
-          localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, action.payload.refreshToken);
+        if (accessToken) {
+          localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+        }
+        if (refreshToken) {
+          localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
         }
       }
     },

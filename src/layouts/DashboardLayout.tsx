@@ -33,23 +33,24 @@ export function DashboardLayout() {
   };
 
   // Derive breadcrumbs based on route
-  const isFormBuilder = location.pathname.includes('/builder');
+  const isFormBuilder = location.pathname.includes('builder');
   const categoryTitle = activeCategory ? activeCategory.title : 'Category';
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+    <div className={cn('bg-slate-900 text-slate-100 flex flex-col font-sans', isFormBuilder ? 'h-screen overflow-hidden' : 'min-h-screen')}>
       {/* Escrow Sidebar */}
       <EscrowSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
 
       {/* Main Content Area */}
       <div
         className={cn(
-          'flex-1 flex flex-col transition-all duration-300 min-h-screen',
+          'flex-1 flex flex-col transition-all duration-300 min-h-0',
+          isFormBuilder ? 'h-screen overflow-hidden' : 'min-h-screen',
           sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'
         )}
       >
         {/* Top Header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 md:px-6 backdrop-blur-md">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 md:px-6 backdrop-blur-md">
           {/* Left Header: Mobile menu button + Breadcrumbs */}
           <div className="flex items-center space-x-3">
             <Button
@@ -130,7 +131,7 @@ export function DashboardLayout() {
         </header>
 
         {/* Page Content Outlet */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 bg-slate-900/60">
+        <main className={cn('flex-1 p-4 md:p-6 bg-slate-900/60 min-h-0', isFormBuilder ? 'h-[calc(100vh-64px)] flex flex-col overflow-hidden' : 'overflow-y-auto')}>
           <Outlet />
         </main>
       </div>

@@ -1,15 +1,39 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import { ApiResponse, AuthTokens } from '@/types';
+import { ApiResponse, AuthTokens, CustomAxiosRequestConfig } from '@/types';
 import { store } from '@/store';
 import { clearAuth, setTokens } from '@/store/slices/authSlice';
 import { setNotification } from '@/store/slices/uiSlice';
 
+const TOKEN_STORAGE_KEY = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
+const REFRESH_TOKEN_STORAGE_KEY = import.meta.env.VITE_AUTH_REFRESH_TOKEN_STORAGE_KEY || 'admin_template_refresh_token';
+
 const getBaseUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_BASE_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl.trim();
+
+  if (!envUrl || !envUrl.trim()) {
+    console.warn('VITE_API_BASE_URL is not configured.');
   }
-  return 'https://staging-api-inburg.igamingadda.com';
+
+  return envUrl?.trim() ?? '';
+};
+
+export const isAuthRequest = (url?: string): boolean => {
+  if (!url) return false;
+
+  return (
+    url.includes('/auth/login') ||
+    url.includes('/admin/authenticate')
+  );
+};
+
+export const isRefreshRequest = (url?: string): boolean => {
+  if (!url) return false;
+
+  return (
+    url.includes('/auth/refresh') ||
+    url.endsWith('/refresh') ||
+    url.includes('/api/auth/refresh')
+  );
 };
 
 // Create axios instance
@@ -17,12 +41,80 @@ const apiClient: AxiosInstance = axios.create({
   baseURL: getBaseUrl(),
 });
 
+// Shared promise for deduplicating concurrent token refresh requests
+let refreshPromise: Promise<string | null> | null = null;
+
+const handleLogoutAndClearState = () => {
+  store.dispatch(clearAuth());
+  store.dispatch(
+    setNotification({
+      type: 'error',
+      title: 'Session Expired',
+      message: 'Please log in again.',
+    })
+  );
+
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+  }
+};
+
+const performTokenRefresh = async (): Promise<string | null> => {
+  const state = store.getState();
+  const refreshToken =
+    state.auth.refreshToken ||
+    (typeof window !== 'undefined' ? localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY) : null);
+
+  if (!refreshToken) {
+    handleLogoutAndClearState();
+    return null;
+  }
+
+  try {
+    // Call configured refresh endpoint /auth/refresh
+    const response = await apiClient.post('/auth/refresh', {
+      refreshToken,
+    });
+
+    const tokensData = response.data?.data ?? response.data;
+    const accessToken =
+      tokensData?.accessToken ??
+      tokensData?.token ??
+      tokensData?.access_token;
+    const newRefreshToken =
+      tokensData?.refreshToken ??
+      tokensData?.refresh_token;
+
+    if (!accessToken) {
+      handleLogoutAndClearState();
+      return null;
+    }
+
+    const tokens: AuthTokens = {
+      accessToken,
+      refreshToken: newRefreshToken ?? refreshToken,
+    };
+
+    store.dispatch(setTokens(tokens));
+    return accessToken;
+  } catch (refreshError) {
+    handleLogoutAndClearState();
+    return null;
+  }
+};
+
 // Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
     const state = store.getState();
-    const storageKey = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
-    const token = state.auth.accessToken || (typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null);
+    const token =
+      state.auth.accessToken ||
+      (typeof window !== 'undefined' ? localStorage.getItem(TOKEN_STORAGE_KEY) : null);
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -41,69 +133,40 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as CustomAxiosRequestConfig | undefined;
 
-    const requestUrl = originalRequest?.url || '';
-    const isAuthRequest =
-      requestUrl.includes('/admin/authenticate') ||
-      requestUrl.includes('/auth/login') ||
-      requestUrl.includes('/refresh');
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
 
-    // Handle 401 errors (unauthorized) ONLY for non-auth requests
-    if (error.response?.status === 401 && !isAuthRequest && !originalRequest._retry) {
+    const requestUrl = originalRequest.url || '';
+
+    // Handle 401 errors (unauthorized) ONLY for non-auth & non-refresh requests that haven't been retried
+    if (
+      error.response?.status === 401 &&
+      !isAuthRequest(requestUrl) &&
+      !isRefreshRequest(requestUrl) &&
+      !originalRequest._retry
+    ) {
       originalRequest._retry = true;
 
-      const state = store.getState();
-      const refreshStorageKey = import.meta.env.VITE_AUTH_REFRESH_TOKEN_STORAGE_KEY || 'admin_template_refresh_token';
-      const refreshToken = state.auth.refreshToken || (typeof window !== 'undefined' ? localStorage.getItem(refreshStorageKey) : null);
+      if (!refreshPromise) {
+        refreshPromise = performTokenRefresh().finally(() => {
+          refreshPromise = null;
+        });
+      }
 
-      if (refreshToken) {
-        try {
-          // Use configured apiClient so base URL is respected
-          const response = await apiClient.post('/api/auth/refresh', {
-            refreshToken,
-          });
+      const newAccessToken = await refreshPromise;
 
-          const tokensData = response.data?.data || response.data;
-          const tokens: AuthTokens = {
-            accessToken: tokensData?.accessToken || tokensData?.token || tokensData?.access_token,
-            refreshToken: tokensData?.refreshToken || tokensData?.refresh_token || refreshToken,
-          };
+      if (newAccessToken) {
+        originalRequest.headers = {
+          ...originalRequest.headers,
+          Authorization: `Bearer ${newAccessToken}`,
+        };
 
-          if (tokens.accessToken) {
-            store.dispatch(setTokens(tokens));
-
-            // Retry original request with new token
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
-            }
-
-            return apiClient(originalRequest);
-          }
-        } catch (refreshError) {
-          store.dispatch(clearAuth());
-          store.dispatch(
-            setNotification({
-              type: 'error',
-              title: 'Session Expired',
-              message: 'Please log in again.',
-            })
-          );
-
-          const storageKey = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem(storageKey);
-            localStorage.removeItem(refreshStorageKey);
-            window.location.href = '/login';
-          }
-        }
+        return apiClient(originalRequest);
       } else {
-        store.dispatch(clearAuth());
-        const storageKey = import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY || 'admin_template_token';
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem(storageKey);
-          window.location.href = '/login';
-        }
+        return Promise.reject(error);
       }
     }
 
@@ -129,21 +192,22 @@ apiClient.interceptors.response.use(
       );
     }
 
-    // Handle client errors (4xx) except 401 which is handled above or on auth requests
+    // Handle client errors (4xx) except 401 which is handled above or on auth/refresh requests
     if (
       error.response?.status &&
       error.response.status >= 400 &&
       error.response.status < 500 &&
-      !isAuthRequest
+      !isAuthRequest(requestUrl) &&
+      !isRefreshRequest(requestUrl)
     ) {
-      const rawMsg = (error.response.data as ApiResponse<any>)?.message;
+      const rawMsg = (error.response.data as ApiResponse<any>)?.message ?? (error.response.data as any)?.error;
       const errorMessage = Array.isArray(rawMsg)
         ? rawMsg.join(', ')
         : typeof rawMsg === 'string'
         ? rawMsg
         : typeof rawMsg === 'object' && rawMsg !== null
         ? JSON.stringify(rawMsg)
-        : 'Request failed. Please check your input and try again.';
+        : error.message || 'Request failed. Please check your input and try again.';
 
       store.dispatch(
         setNotification({

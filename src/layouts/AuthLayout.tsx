@@ -24,7 +24,7 @@ export function AuthLayout() {
           {/* Logo and title */}
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold tracking-tight">
-              Admin Template
+              Admin of Escrow
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Production-ready React template

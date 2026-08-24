@@ -7,6 +7,7 @@ import {
   Edit2,
   FormInput,
   Trash2,
+  Eye,
   Globe,
   Palette,
   Code2,
@@ -20,16 +21,20 @@ import {
   XCircle,
   AlertTriangle,
   RefreshCw,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCategory } from '@/context/CategoryContext';
 import { Category } from '@/types/escrowTypes';
-import categoryService from '@/services/categoryService';
+import categoryService, { buildCategoryBackendPayload, mapCategoryFromApi } from '@/services/categoryService';
+import handleCategoryApiError from '@/utils/categoryErrorHandler';
+import { FormPreviewModal } from '@/components/admin/FormPreviewModal';
 import toast from 'react-hot-toast';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Shield,
   Globe,
   Palette,
   Code2,
@@ -43,7 +48,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 
 export const CategoriesPage: React.FC = () => {
   const navigate = useNavigate();
-  const { setActiveCategoryId, addCategory } = useCategory();
+  const { setActiveCategoryId, addCategory, refreshCategories } = useCategory();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,12 +60,20 @@ export const CategoriesPage: React.FC = () => {
 
   // Modal States
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
+  // Delete & Preview Modal States
+  const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [previewCategory, setPreviewCategory] = useState<Category | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   // Form inputs for modal
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [icon, setIcon] = useState('Globe');
+  const [icon, setIcon] = useState('Shield');
   const [status, setStatus] = useState<string>('active');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -77,9 +90,8 @@ export const CategoriesPage: React.FC = () => {
         setCategories([]);
       }
     } catch (err: any) {
-      console.error('Fetch categories API error:', err);
       setIsError(true);
-      const msg = err.response?.data?.message || err.message || 'Failed to load categories from backend API';
+      const msg = handleCategoryApiError(err, { silent: true });
       setErrorMessage(msg);
       setCategories([]);
       toast.error(msg);
@@ -106,7 +118,7 @@ export const CategoriesPage: React.FC = () => {
   const openCreateModal = () => {
     setTitle('');
     setDescription('');
-    setIcon('Globe');
+    setIcon('Shield');
     setStatus('active');
     setIsCreateOpen(true);
   };
@@ -115,49 +127,146 @@ export const CategoriesPage: React.FC = () => {
     setEditingCategory(cat);
     setTitle(cat.title || cat.name || '');
     setDescription(cat.description || '');
-    setIcon(cat.icon || 'Globe');
+    setIcon(cat.icon || 'Shield');
     setStatus(cat.status || 'active');
+    setIsEditOpen(true);
+  };
+
+  // PATCH /category/{id} - Update Category Metadata & Form
+  const handleUpdateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting || !editingCategory) return;
+
+    const categoryName = title.trim();
+    if (!categoryName) {
+      toast.error('Category name is required.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (editingCategory.status !== status) {
+        await categoryService.setStatus(editingCategory.id, status);
+      }
+
+      const updatedCategoryObj: Category = {
+        ...editingCategory,
+        title: categoryName,
+        name: categoryName,
+        description: description.trim(),
+        icon,
+        status: status as 'active' | 'inactive',
+      };
+
+      const payload = buildCategoryBackendPayload(updatedCategoryObj);
+      await categoryService.update(editingCategory.id, payload);
+
+      toast.success(`Category "${categoryName}" updated successfully!`);
+      setCategories((prev) =>
+        prev.map((c) => (c.id === editingCategory.id ? updatedCategoryObj : c))
+      );
+      if (refreshCategories) {
+        refreshCategories();
+      }
+      setIsEditOpen(false);
+      setEditingCategory(null);
+    } catch (err: any) {
+      if (err?.response?.status === 409 || err?.status === 409) {
+        toast.error('The category form cannot be updated after a contract item has used it.');
+      } else {
+        handleCategoryApiError(err);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // DELETE /category/{id}
+  const handleConfirmDeleteCategory = async () => {
+    if (!categoryToDelete || isDeleting) return;
+
+    setIsDeleting(true);
+    try {
+      await categoryService.delete(categoryToDelete.id);
+      toast.success(`Category "${categoryToDelete.title || categoryToDelete.name}" deleted successfully!`);
+      setCategories((prev) => prev.filter((c) => c.id !== categoryToDelete.id));
+      if (refreshCategories) {
+        refreshCategories();
+      }
+      setCategoryToDelete(null);
+    } catch (err: any) {
+      if (err?.response?.status === 409 || err?.status === 409) {
+        toast.error('A category cannot be deleted after a contract item has used it. Deactivate it with status Inactive instead.');
+      } else {
+        handleCategoryApiError(err);
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // GET /category/{id}/form - View Form Preview
+  const handleViewForm = async (cat: Category) => {
+    setIsLoadingPreview(true);
+    try {
+      const response = await categoryService.getForm(cat.id);
+      if (response && response.data) {
+        const normalized = mapCategoryFromApi(response.data);
+        setPreviewCategory(normalized);
+      } else {
+        setPreviewCategory(cat);
+      }
+    } catch (err) {
+      try {
+        const response = await categoryService.getById(cat.id);
+        if (response && response.data) {
+          setPreviewCategory(response.data);
+        } else {
+          setPreviewCategory(cat);
+        }
+      } catch {
+        setPreviewCategory(cat);
+      }
+    } finally {
+      setIsLoadingPreview(false);
+      setIsPreviewOpen(true);
+    }
   };
 
   // POST /category
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      toast.error('Category title is required.');
+    if (isSubmitting) return;
+
+    const categoryName = title.trim();
+    if (!categoryName) {
+      toast.error('Category name is required.');
       return;
     }
 
     setIsSubmitting(true);
     try {
       const response = await categoryService.create({
-        name: title.trim(),
-        title: title.trim(),
-        description: description.trim(),
+        name: categoryName,
         icon,
         status,
+        steps: [],
       });
 
       const newCat = response.data;
-      toast.success(`Category "${newCat.title || newCat.name}" created successfully!`);
+      toast.success(`Category "${newCat.name || newCat.title}" created successfully!`);
       setIsCreateOpen(false);
 
-      // Refresh list
-      fetchCategories();
+      // Refresh list & context
+      if (refreshCategories) {
+        await refreshCategories();
+      }
+      await fetchCategories();
+
+      // Refresh page
+      window.location.reload();
     } catch (err: any) {
-      console.error('Create category API error:', err);
-      const msg = err.response?.data?.message || err.message || 'Failed to create category on backend';
-      toast.error(msg);
-
-      // Fallback local creation in Context if needed
-      const createdLocal = await addCategory({
-        title: title.trim(),
-        name: title.trim(),
-        description: description.trim(),
-        icon,
-        status: status as 'active' | 'inactive',
-      });
-      setCategories((prev) => [createdLocal, ...prev]);
-      setIsCreateOpen(false);
+      handleCategoryApiError(err);
     } finally {
       setIsSubmitting(false);
     }
@@ -173,15 +282,13 @@ export const CategoriesPage: React.FC = () => {
         prev.map((c) => (c.id === cat.id ? { ...c, status: newStatus as 'active' | 'inactive' } : c))
       );
     } catch (err: any) {
-      console.error('Status update API error:', err);
-      const msg = err.response?.data?.message || err.message || 'Failed to update category status';
-      toast.error(msg);
+      handleCategoryApiError(err);
     }
   };
 
   const handleOpenBuilder = (catId: string) => {
     setActiveCategoryId(catId);
-    navigate(`/categories/${catId}/builder`);
+    navigate(`/form-builder/${catId}`);
   };
 
   return (
@@ -219,8 +326,8 @@ export const CategoriesPage: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
-          <span className="text-xs text-slate-400 font-medium">Status:</span>
+        <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end overflow-x-auto">
+          <span className="text-xs text-slate-400 font-medium shrink-0">Status:</span>
           <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
             {['all', 'active', 'inactive'].map((st) => (
               <button
@@ -281,7 +388,7 @@ export const CategoriesPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredCategories.map((cat) => {
-            const IconComp = ICON_MAP[cat.icon] || Globe;
+            const IconComp = ICON_MAP[cat.icon] || Shield || Globe;
             const fieldsCount = Array.isArray(cat.fields) ? cat.fields.length : 0;
             const catTitle = cat.title || cat.name || 'Untitled Category';
 
@@ -294,8 +401,8 @@ export const CategoriesPage: React.FC = () => {
                   {/* Category Header */}
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 group-hover:scale-105 transition-transform">
-                        <IconComp className="h-5 w-5" />
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-md shadow-purple-600/20 text-white group-hover:scale-105 transition-transform">
+                        <IconComp className="h-5 w-5 stroke-[2]" />
                       </div>
                       <div>
                         <h2 className="text-sm font-bold text-slate-100 group-hover:text-indigo-300 transition-colors">
@@ -335,25 +442,57 @@ export const CategoriesPage: React.FC = () => {
 
                 {/* Footer Info & Actions */}
                 <div className="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-between">
-                  <div className="flex items-center space-x-3 text-[11px] text-slate-500 font-medium">
-                    <span>{fieldsCount} Inputs</span>
-                    <span>•</span>
-                    <span>{cat.escrowCount || 0} Escrows</span>
+                  <div className="flex flex-col">
+                    <span className="text-[11px]">
+                      {fieldsCount > 0 ? (
+                        <span className="text-indigo-300 font-bold flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                          Active Form ({fieldsCount} {fieldsCount === 1 ? 'Input' : 'Inputs'})
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 font-medium">No Active Form</span>
+                      )}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {cat.escrowCount || 0} Escrows
+                    </span>
                   </div>
 
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                     <Button
-                      onClick={() => openEditModal(cat)}
+                      onClick={() => handleViewForm(cat)}
+                      title="View Form Structure"
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2.5 text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg"
+                      className="h-8 px-2 text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 rounded-lg flex items-center gap-1"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">View Form</span>
+                    </Button>
+
+                    <Button
+                      onClick={() => openEditModal(cat)}
+                      title="Edit Category Details"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg"
                     >
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
 
                     <Button
+                      onClick={() => setCategoryToDelete(cat)}
+                      title="Delete Category"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+
+                    <Button
                       onClick={() => handleOpenBuilder(cat.id)}
-                      className="h-8 px-3 text-xs font-bold bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 rounded-lg flex items-center gap-1.5 transition-all"
+                      className="h-8 px-2.5 text-xs font-bold bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 rounded-lg flex items-center gap-1.5 transition-all"
                     >
                       <FormInput className="h-3.5 w-3.5" />
                       <span>Form Builder</span>
@@ -384,16 +523,7 @@ export const CategoriesPage: React.FC = () => {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-300">Description</Label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Briefly describe the category..."
-                  rows={3}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -444,6 +574,142 @@ export const CategoriesPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {isEditOpen && editingCategory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-100">Edit Category</h2>
+                <p className="text-xs text-slate-400">Update category details and status</p>
+              </div>
+              <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                ID: {editingCategory.id}
+              </span>
+            </div>
+
+            <form onSubmit={handleUpdateCategory} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-300">Category Name / Title *</Label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Website Development"
+                  className="bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-xl h-10"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-300">Icon</Label>
+                  <select
+                    value={icon}
+                    onChange={(e) => setIcon(e.target.value)}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                  >
+                    {Object.keys(ICON_MAP).map((ic) => (
+                      <option key={ic} value={ic}>
+                        {ic}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-300">Status</Label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setIsEditOpen(false);
+                    setEditingCategory(null);
+                  }}
+                  variant="ghost"
+                  className="text-xs text-slate-400 hover:text-slate-200"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl h-10 px-4 shadow-lg shadow-indigo-600/20"
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {categoryToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-100">Delete Category</h2>
+                <p className="text-xs text-slate-400">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              Are you sure you want to delete category <strong className="text-slate-100">{categoryToDelete.title || categoryToDelete.name}</strong> (ID: {categoryToDelete.id})?
+            </p>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <Button
+                type="button"
+                onClick={() => setCategoryToDelete(null)}
+                variant="ghost"
+                disabled={isDeleting}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmDeleteCategory}
+                disabled={isDeleting}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl h-10 px-4 shadow-lg shadow-rose-600/20"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Category'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Form Preview Modal */}
+      {isPreviewOpen && previewCategory && (
+        <FormPreviewModal
+          isOpen={isPreviewOpen}
+          onClose={() => {
+            setIsPreviewOpen(false);
+            setPreviewCategory(null);
+          }}
+          categoryTitle={previewCategory.title || previewCategory.name}
+          categoryDescription={previewCategory.description}
+          steps={previewCategory.steps || []}
+          fields={previewCategory.fields || []}
+        />
       )}
     </div>
   );

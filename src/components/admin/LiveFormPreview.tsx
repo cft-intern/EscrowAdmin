@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FormFieldConfig, FieldType } from '@/types/escrowTypes';
+import { FormFieldConfig, FieldType, FormStep } from '@/types/escrowTypes';
 import {
   Upload,
   Image as ImageIcon,
@@ -9,8 +9,9 @@ import {
   Clock,
   DollarSign,
   ChevronDown,
-  ArrowRight,
   Info,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,15 +27,36 @@ interface LiveFormPreviewProps {
   title: string;
   description: string;
   fields: FormFieldConfig[];
+  steps?: FormStep[];
   onReorder?: (reorderedFields: FormFieldConfig[]) => void;
 }
 
-export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, description, fields, onReorder }) => {
+export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, description, fields, steps, onReorder }) => {
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [previewRole, setPreviewRole] = useState<'buyer' | 'seller'>('buyer');
+  const [activeStepIdx, setActiveStepIdx] = useState<number>(0);
 
-  const activeFields = fields.filter((f) => f.enabled !== false);
+  const activeSteps = steps && steps.length > 0 ? steps : [
+    {
+      id: 'step-1',
+      name: 'Basic Information',
+      order: 1,
+      description: 'General category inputs and parameters',
+      fields: fields,
+      fieldGroups: [],
+    }
+  ];
+
+  const currentStep = activeSteps[Math.min(activeStepIdx, activeSteps.length - 1)] || activeSteps[0];
+  const stepFields = currentStep ? currentStep.fields : fields;
+
+  const activeFields = stepFields.filter((f) => {
+    if (f.enabled === false) return false;
+    const role = f.targetRole || 'both';
+    return role === 'both' || role === previewRole;
+  });
 
   const handleInputChange = (fieldName: string, val: any) => {
     setFormValues((prev) => ({ ...prev, [fieldName]: val }));
@@ -95,9 +117,9 @@ export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, descrip
           <textarea
             value={val}
             onChange={(e) => handleInputChange(field.name, e.target.value)}
-            placeholder={field.placeholder || `Describe ${field.label.toLowerCase()}...`}
+            placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
             rows={field.rows || 3}
-            className="w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         );
 
@@ -110,27 +132,47 @@ export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, descrip
             max={field.max}
             step={field.step || 1}
             onChange={(e) => handleInputChange(field.name, e.target.value)}
-            placeholder={field.placeholder || '0'}
-            className="bg-slate-900 border-slate-800 text-slate-100 text-xs rounded-xl h-10"
+            placeholder={field.placeholder || '0.00'}
+            className="bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-500 rounded-xl h-10 text-xs focus:ring-indigo-500"
+          />
+        );
+
+      case 'currency':
+        return (
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-400">
+              {field.currencySymbol || '$'}
+            </div>
+            <Input
+              type="number"
+              value={val}
+              onChange={(e) => handleInputChange(field.name, e.target.value)}
+              placeholder="0.00"
+              className="pl-8 bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-500 rounded-xl h-10 text-xs focus:ring-indigo-500"
+            />
+          </div>
+        );
+
+      case 'date':
+      case 'datetime':
+        return (
+          <Input
+            type={field.type === 'datetime' ? 'datetime-local' : 'date'}
+            value={val}
+            onChange={(e) => handleInputChange(field.name, e.target.value)}
+            className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl h-10 text-xs focus:ring-indigo-500"
           />
         );
 
       case 'select':
         return (
-          <Select
-            value={val || ''}
-            onValueChange={(newVal) => handleInputChange(field.name, newVal)}
-          >
-            <SelectTrigger className="w-full bg-slate-900 border-slate-800 text-slate-100 text-xs rounded-xl h-10 focus:ring-1 focus:ring-indigo-500">
+          <Select value={val} onValueChange={(v) => handleInputChange(field.name, v)}>
+            <SelectTrigger className="w-full bg-slate-900 border-slate-800 text-slate-100 rounded-xl h-10 text-xs">
               <SelectValue placeholder={field.placeholder || 'Select an option...'} />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl shadow-2xl z-[100]">
-              {field.options?.map((opt) => (
-                <SelectItem
-                  key={opt.id}
-                  value={opt.value}
-                  className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white rounded-lg py-2 my-0.5"
-                >
+            <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl shadow-2xl z-[150]">
+              {(field.options || []).map((opt) => (
+                <SelectItem key={opt.id || opt.value} value={opt.value} className="text-xs cursor-pointer focus:bg-indigo-600 focus:text-white">
                   {opt.label}
                 </SelectItem>
               ))}
@@ -138,45 +180,18 @@ export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, descrip
           </Select>
         );
 
-      case 'multiselect':
-        return (
-          <div className="space-y-1.5 bg-slate-900 border border-slate-800 rounded-xl p-3">
-            {field.options?.map((opt) => {
-              const currentArr = Array.isArray(val) ? val : [];
-              const checked = currentArr.includes(opt.value);
-              return (
-                <label key={opt.id} className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        handleInputChange(field.name, [...currentArr, opt.value]);
-                      } else {
-                        handleInputChange(field.name, currentArr.filter((v: string) => v !== opt.value));
-                      }
-                    }}
-                    className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span>{opt.label}</span>
-                </label>
-              );
-            })}
-          </div>
-        );
-
       case 'radio':
         return (
           <div className="space-y-2 pt-1">
-            {field.options?.map((opt) => (
-              <label key={opt.id} className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+            {(field.options || []).map((opt) => (
+              <label key={opt.id || opt.value} className="flex items-center space-x-2.5 text-xs text-slate-200 cursor-pointer bg-slate-900/60 p-2.5 rounded-xl border border-slate-800 hover:border-indigo-500/40 transition-colors">
                 <input
                   type="radio"
                   name={field.name}
                   value={opt.value}
                   checked={val === opt.value}
-                  onChange={(e) => handleInputChange(field.name, e.target.value)}
-                  className="border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500"
+                  onChange={() => handleInputChange(field.name, opt.value)}
+                  className="text-indigo-600 focus:ring-indigo-500 bg-slate-950 border-slate-700"
                 />
                 <span>{opt.label}</span>
               </label>
@@ -186,128 +201,28 @@ export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, descrip
 
       case 'checkbox':
         return (
-          <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer pt-1">
+          <label className="flex items-center space-x-2.5 text-xs text-slate-200 cursor-pointer bg-slate-900/60 p-3 rounded-xl border border-slate-800">
             <input
               type="checkbox"
-              checked={!!val}
+              checked={Boolean(val)}
               onChange={(e) => handleInputChange(field.name, e.target.checked)}
-              className="h-4 w-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500"
+              className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
             />
-            <span>{field.description || 'Check to confirm'}</span>
+            <span className="font-medium">{field.label}</span>
           </label>
-        );
-
-      case 'toggle':
-        return (
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-xs text-slate-400">{field.description || 'Enable option'}</span>
-            <button
-              type="button"
-              onClick={() => handleInputChange(field.name, !val)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                val ? 'bg-indigo-600' : 'bg-slate-800'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  val ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-        );
-
-      case 'date':
-        return (
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              type="date"
-              value={val}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-              className="pl-9 bg-slate-900 border-slate-800 text-slate-100 text-xs rounded-xl h-10"
-            />
-          </div>
-        );
-
-      case 'datetime':
-        return (
-          <div className="relative">
-            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              type="datetime-local"
-              value={val}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-              className="pl-9 bg-slate-900 border-slate-800 text-slate-100 text-xs rounded-xl h-10"
-            />
-          </div>
         );
 
       case 'file':
       case 'image':
         return (
-          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/50 p-4 text-center space-y-2 hover:border-indigo-500/50 transition-colors">
-            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
-              {field.type === 'image' ? <ImageIcon className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
-            </div>
-            <div className="text-[11px] text-slate-400">
-              <span className="text-indigo-400 font-medium">Click to upload</span> or drag and drop
-            </div>
-            <p className="text-[10px] text-slate-500">
-              {field.allowedTypes?.join(', ') || (field.type === 'image' ? 'PNG, JPG, WEBP' : 'PDF, DOCX, ZIP')}{' '}
-              (Max {field.maxSizeMb || 25}MB)
+          <div className="border border-dashed border-slate-800 rounded-xl p-4 text-center bg-slate-900/40 hover:border-indigo-500/50 transition-colors cursor-pointer">
+            <Upload className="h-5 w-5 text-indigo-400 mx-auto mb-1.5" />
+            <p className="text-xs font-semibold text-slate-300">
+              Drop files here or click to upload
             </p>
-          </div>
-        );
-
-      case 'wallet':
-        return (
-          <div className="space-y-1">
-            <div className="relative">
-              <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-400" />
-              <Input
-                type="text"
-                value={val}
-                onChange={(e) => handleInputChange(field.name, e.target.value)}
-                placeholder={field.placeholder || '0x...'}
-                className="pl-9 bg-slate-900 border-slate-800 text-slate-100 font-mono text-xs rounded-xl h-10"
-              />
-            </div>
-            {field.supportedNetwork && (
-              <span className="text-[10px] text-indigo-400 font-medium block">
-                Network: {field.supportedNetwork}
-              </span>
-            )}
-          </div>
-        );
-
-      case 'currency':
-        return (
-          <div className="flex rounded-xl border border-slate-800 bg-slate-900 overflow-hidden focus-within:border-indigo-500 transition-colors">
-            <div className="border-r border-slate-800 bg-slate-950/80">
-              <Select
-                value={field.currencySymbol || '$'}
-                onValueChange={(sym) => handleInputChange(`${field.name}_symbol`, sym)}
-              >
-                <SelectTrigger className="h-10 border-0 bg-transparent px-3 text-xs font-semibold text-indigo-400 focus:ring-0 focus:border-0 gap-1.5 rounded-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-xl shadow-2xl z-[100]">
-                  <SelectItem value="$" className="text-xs focus:bg-indigo-600 focus:text-white cursor-pointer">USD ($)</SelectItem>
-                  <SelectItem value="€" className="text-xs focus:bg-indigo-600 focus:text-white cursor-pointer">EUR (€)</SelectItem>
-                  <SelectItem value="£" className="text-xs focus:bg-indigo-600 focus:text-white cursor-pointer">GBP (£)</SelectItem>
-                  <SelectItem value="ETH" className="text-xs focus:bg-indigo-600 focus:text-white cursor-pointer">Ethereum (ETH)</SelectItem>
-                  <SelectItem value="SOL" className="text-xs focus:bg-indigo-600 focus:text-white cursor-pointer">Solana (SOL)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Input
-              type="number"
-              value={val}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-              placeholder={field.placeholder || '0.00'}
-              className="flex-1 border-0 bg-transparent text-slate-100 text-xs rounded-none h-10 focus:ring-0 focus:border-0"
-            />
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              Max size: {field.maxSizeMb || 25}MB
+            </p>
           </div>
         );
 
@@ -328,59 +243,102 @@ export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, descrip
                 className="bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-lg h-9"
               />
             </div>
-            {field.requireCountry && (
-              <Input
-                placeholder="Country *"
-                className="bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-lg h-9"
-              />
-            )}
           </div>
         );
 
       default:
         return (
           <Input
+            type="text"
             value={val}
             onChange={(e) => handleInputChange(field.name, e.target.value)}
-            className="bg-slate-900 border-slate-800 text-slate-100 text-xs rounded-xl h-10"
+            placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+            className="bg-slate-900 border-slate-800 text-slate-100 placeholder:text-slate-500 rounded-xl h-10 text-xs focus:ring-indigo-500"
           />
         );
     }
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl flex flex-col h-[calc(100vh-260px)] space-y-4">
-      {/* Header Banner (Fixed) */}
+    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 sm:p-5 shadow-2xl flex flex-col h-full overflow-hidden space-y-4 min-h-0">
+      {/* Header Bar */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
         <div className="flex items-center space-x-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Live Form Preview</h3>
+          <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            Live Form Preview
+          </h2>
         </div>
-        <span className="text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full">
-          Buyer Form View
-        </span>
+
+        {/* Role Toggle Switcher */}
+        <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setPreviewRole('buyer')}
+            className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
+              previewRole === 'buyer'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Buyer View
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewRole('seller')}
+            className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${
+              previewRole === 'seller'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Seller View
+          </button>
+        </div>
       </div>
 
       {/* Form Title & Description (Fixed) */}
       <div className="space-y-1 shrink-0">
-        <h2 className="text-lg font-bold text-slate-100">{title || 'Category Title'}</h2>
+        <h2 className="text-base sm:text-lg font-bold text-slate-100">{title || 'Category Title'}</h2>
         <p className="text-xs text-slate-400 leading-relaxed">
           {description || 'Please provide details for your escrow transaction.'}
         </p>
       </div>
 
-      {/* Dynamic Fields List (Scrollable Inner Area) */}
+      {/* Multi-Step Indicator Header */}
+      {activeSteps.length > 1 && (
+        <div className="shrink-0 bg-slate-900/80 border border-slate-800 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold">
+            <span className="text-indigo-400 uppercase tracking-wider">
+              Step {activeStepIdx + 1} of {activeSteps.length}: {currentStep?.name || 'Step'}
+            </span>
+            <span className="text-slate-500 font-mono text-[11px]">
+              {Math.round(((activeStepIdx + 1) / activeSteps.length) * 100)}% Complete
+            </span>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-800">
+            <div
+              className="bg-gradient-to-r from-indigo-500 to-violet-500 h-full transition-all duration-300"
+              style={{ width: `${((activeStepIdx + 1) / activeSteps.length) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Fields List (Natural Flow Area) */}
       {activeFields.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-xl bg-slate-900/30 p-6 text-center">
+        <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-xl bg-slate-900/30 p-6 text-center min-h-[200px]">
           <Info className="h-6 w-6 text-slate-500 mb-2" />
           <p className="text-xs text-slate-400 font-medium">Form live preview will appear here</p>
           <p className="text-[11px] text-slate-500 mt-0.5">Add and configure fields in the builder column.</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-12 gap-3 content-start">
+        <div className="flex-1 overflow-y-auto pr-1.5 grid grid-cols-12 gap-3 content-start [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-800/80 [&::-webkit-scrollbar-thumb]:rounded-full">
           {activeFields.map((field, idx) => {
-            const isHalf = field.width === 'half' || (!field.width && !['textarea', 'address', 'file', 'image', 'multiselect'].includes(field.type));
-            const colSpanClass = isHalf ? 'col-span-12 sm:col-span-6' : 'col-span-12';
+            const isHalf = field.fieldsPerRow === 2 || field.width === 'half';
+            const colSpanClass = isHalf ? 'col-span-12 xl:col-span-6' : 'col-span-12';
 
             return (
               <div
@@ -393,18 +351,20 @@ export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, descrip
                   setDraggedIdx(null);
                   setDragOverIdx(null);
                 }}
-                className={`${colSpanClass} space-y-1.5 p-2 rounded-xl border transition-all ${
+                className={`${colSpanClass} space-y-1.5 p-3 rounded-xl border transition-all ${
                   dragOverIdx === idx
                     ? 'border-indigo-500 bg-indigo-500/10 ring-2 ring-indigo-500/30'
-                    : 'border-transparent hover:border-slate-800/80 hover:bg-slate-900/40'
+                    : 'border-slate-900 hover:border-slate-800 bg-slate-900/40'
                 } ${onReorder ? 'cursor-grab active:cursor-grabbing' : ''}`}
               >
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-semibold text-slate-200 flex items-center gap-1">
-                    <span>{field.label}</span>
-                    {field.required && <span className="text-rose-300 font-medium">*</span>}
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <Label className="text-xs font-semibold text-slate-200 flex items-center gap-1 min-w-0 max-w-[calc(100%-55px)]">
+                    <span className="truncate">{field.label || 'Untitled'}</span>
+                    {field.required && <span className="text-rose-400 font-bold shrink-0">*</span>}
                   </Label>
-                  <span className="text-[10px] font-mono text-slate-500 uppercase">{field.type}</span>
+                  <span className="text-[9px] font-mono text-slate-400 bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800 uppercase shrink-0">
+                    {field.type}
+                  </span>
                 </div>
 
                 {field.type !== 'checkbox' && field.type !== 'toggle' && field.description && (
@@ -418,16 +378,30 @@ export const LiveFormPreview: React.FC<LiveFormPreviewProps> = ({ title, descrip
         </div>
       )}
 
-      {/* Action button mock (Fixed Bottom) */}
-      <div className="pt-3 border-t border-slate-800 shrink-0">
-        <button
-          type="button"
-          className="w-full h-10 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
-        >
-          <span>Continue to Escrow Deposit</span>
-          <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
+      {/* Multi-Step Controls Footer */}
+      {activeSteps.length > 1 && (
+        <div className="shrink-0 flex items-center justify-between pt-3 border-t border-slate-800 bg-slate-950">
+          <button
+            type="button"
+            onClick={() => setActiveStepIdx((prev) => Math.max(0, prev - 1))}
+            disabled={activeStepIdx === 0}
+            className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span>Previous Step</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveStepIdx((prev) => Math.min(activeSteps.length - 1, prev + 1))}
+            disabled={activeStepIdx === activeSteps.length - 1}
+            className="flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-4 py-1.5 rounded-lg shadow-md shadow-indigo-600/20"
+          >
+            <span>Next Step</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
