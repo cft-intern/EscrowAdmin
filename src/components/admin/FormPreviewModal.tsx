@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FormFieldConfig, FormStep, FieldType, FieldGroup } from '@/types/escrowTypes';
-import { X, Upload, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { X, Upload, ChevronLeft, ChevronRight, Info, Edit2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 interface FormPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onEditForm?: () => void;
   categoryTitle: string;
   categoryDescription?: string;
   steps: FormStep[];
@@ -24,6 +25,7 @@ interface FormPreviewModalProps {
 export const FormPreviewModal: React.FC<FormPreviewModalProps> = ({
   isOpen,
   onClose,
+  onEditForm,
   categoryTitle,
   categoryDescription,
   steps,
@@ -47,7 +49,9 @@ export const FormPreviewModal: React.FC<FormPreviewModalProps> = ({
   ];
 
   const currentStep = normalizedSteps[Math.min(activeStepIdx, normalizedSteps.length - 1)] || normalizedSteps[0];
-  const stepFields = currentStep?.fields || [];
+  const stepFields: FormFieldConfig[] = (currentStep?.fields && currentStep.fields.length > 0)
+    ? currentStep.fields
+    : ((currentStep as any)?.fieldDefinitions || []);
 
   const activeFields = stepFields.filter((f) => {
     if (f.enabled === false) return false;
@@ -238,12 +242,27 @@ export const FormPreviewModal: React.FC<FormPreviewModalProps> = ({
             </p>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#132140] transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center space-x-3">
+            {onEditForm && (
+              <Button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEditForm();
+                }}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl px-4 h-9 text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                <span>Edit Form</span>
+              </Button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#132140] transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Content Scroll Area */}
@@ -256,65 +275,64 @@ export const FormPreviewModal: React.FC<FormPreviewModalProps> = ({
 
               return (
                 <React.Fragment key={step.id}>
-                  <button
-                    onClick={() => setActiveStepIdx(idx)}
-                    className="flex items-center space-x-2 text-xs font-semibold transition-all focus:outline-none"
-                  >
-                    <span
-                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  <div className="flex items-center space-x-2">
+                    <div
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition-colors ${
                         isActive
-                          ? 'bg-sky-500 text-slate-950 font-black shadow-lg shadow-sky-500/20'
+                          ? 'bg-sky-500 text-slate-950 font-mono'
                           : isPassed
-                          ? 'bg-sky-900/60 text-sky-300 border border-sky-600/40'
-                          : 'border border-[#203666] text-slate-400 bg-[#070f23]'
+                          ? 'bg-sky-900/50 text-sky-300 font-mono'
+                          : 'bg-[#121f3a] text-slate-400 font-mono'
                       }`}
                     >
                       {idx + 1}
+                    </div>
+                    <span
+                      className={`text-xs font-bold transition-colors ${
+                        isActive ? 'text-sky-300' : isPassed ? 'text-slate-300' : 'text-slate-500'
+                      }`}
+                    >
+                      {step.name}
                     </span>
-                    <span className={isActive ? 'text-slate-100 font-bold' : 'text-slate-400'}>
-                      {step.name || `Step ${idx + 1}`}
-                    </span>
-                  </button>
-
+                  </div>
                   {idx < normalizedSteps.length - 1 && (
-                    <div className="w-8 h-[2px] bg-[#1d325e]" />
+                    <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
                   )}
                 </React.Fragment>
               );
             })}
           </div>
 
-          {/* Active Step Heading */}
-          <div className="space-y-1">
-            <h3 className="text-lg font-bold text-slate-100">
-              {currentStep?.name || `Step ${activeStepIdx + 1}`}
-            </h3>
-          </div>
-
-          {/* Step Fields Container */}
+          {/* Active Step Fields Card */}
           {activeFields.length === 0 ? (
-            <div className="rounded-2xl border border-[#16274a] bg-[#081024] p-8 text-center text-slate-400 text-sm">
-              No fields in this step.
+            <div className="py-12 text-center rounded-2xl border border-dashed border-[#1d3361] bg-[#070e20]">
+              <Info className="h-8 w-8 text-sky-400/50 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-300">No input fields configured for this step</p>
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Ungrouped Fields Card */}
+              {/* Ungrouped Fields */}
               {ungroupedFields.length > 0 && (
-                <div className="rounded-2xl border border-[#16274a] bg-[#070e20] p-5 sm:p-6 shadow-lg">
-                  <div className="grid grid-cols-12 gap-4 sm:gap-5">
-                    {ungroupedFields.map((field) => renderFieldCard(field))}
-                  </div>
+                <div className="grid grid-cols-12 gap-4 sm:gap-5">
+                  {ungroupedFields.map((field) => renderFieldCard(field))}
                 </div>
               )}
 
-              {/* Grouped Fields Sections */}
+              {/* Grouped Fields */}
               {fieldGroups.map((group) => {
                 const groupFields = activeFields.filter((f) => f.groupId === group.id);
                 if (groupFields.length === 0) return null;
 
                 return (
-                  <div key={group.id} className="space-y-2">
-                    <h4 className="text-sm font-bold text-slate-200">{group.name}</h4>
+                  <div key={group.id} className="space-y-3">
+                    <div className="border-b border-[#16274a] pb-2">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-sky-300">
+                        {group.name}
+                      </h4>
+                      {group.description && (
+                        <p className="text-[11px] text-slate-400 mt-0.5">{group.description}</p>
+                      )}
+                    </div>
                     <div className="rounded-2xl border border-dashed border-[#1d3361] bg-[#070e20]/80 p-5 sm:p-6">
                       <div className="grid grid-cols-12 gap-4 sm:gap-5">
                         {groupFields.map((field) => renderFieldCard(field))}
@@ -339,23 +357,40 @@ export const FormPreviewModal: React.FC<FormPreviewModalProps> = ({
             Back
           </Button>
 
-          {activeStepIdx < normalizedSteps.length - 1 ? (
-            <Button
-              type="button"
-              onClick={() => setActiveStepIdx((prev) => Math.min(normalizedSteps.length - 1, prev + 1))}
-              className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl px-6 h-10 text-xs shadow-lg shadow-sky-500/20"
-            >
-              Next
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              onClick={onClose}
-              className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl px-6 h-10 text-xs shadow-lg shadow-sky-500/20"
-            >
-              Finish
-            </Button>
-          )}
+          <div className="flex items-center space-x-3">
+            {onEditForm && (
+              <Button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEditForm();
+                }}
+                variant="outline"
+                className="border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 font-bold rounded-xl px-4 h-10 text-xs flex items-center gap-1.5"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                <span>Edit Form</span>
+              </Button>
+            )}
+
+            {activeStepIdx < normalizedSteps.length - 1 ? (
+              <Button
+                type="button"
+                onClick={() => setActiveStepIdx((prev) => Math.min(normalizedSteps.length - 1, prev + 1))}
+                className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl px-6 h-10 text-xs shadow-lg shadow-sky-500/20"
+              >
+                Next
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={onClose}
+                className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-xl px-6 h-10 text-xs shadow-lg shadow-sky-500/20"
+              >
+                Finish
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

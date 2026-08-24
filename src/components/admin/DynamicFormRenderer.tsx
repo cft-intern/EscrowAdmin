@@ -92,7 +92,9 @@ export const DynamicFormRenderer: React.FC<DynamicFormRendererProps> = ({
       ];
 
   const currentStep = (normalizedSteps[Math.min(activeStepIdx, normalizedSteps.length - 1)] || normalizedSteps[0]) || { id: 'step-1', name: 'Step 1', order: 1, fields: [], fieldGroups: [] };
-  const rawFields: FormFieldConfig[] = currentStep.fields || [];
+  const rawFields: FormFieldConfig[] = (currentStep.fields && currentStep.fields.length > 0)
+    ? currentStep.fields
+    : ((currentStep as any).fieldDefinitions || []);
   const activeFields = [...rawFields].sort((a, b) => (a.displayOrder || a.order || 0) - (b.displayOrder || b.order || 0));
   const fieldGroups = [...(currentStep.fieldGroups || [])].sort((a, b) => (a.displayOrder || a.order || 0) - (b.displayOrder || b.order || 0));
   const ungroupedFields = activeFields.filter((f) => !f.groupId);

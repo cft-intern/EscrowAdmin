@@ -114,7 +114,11 @@ export const mapCategoryFromApi = (raw: any): Category => {
   if (Array.isArray(raw.steps) && raw.steps.length > 0) {
     steps = raw.steps.map((st: any, sIdx: number) => {
       const stepId = String(st.id || `step-${sIdx + 1}`);
-      const rawDirectFields = Array.isArray(st.fields) ? st.fields : [];
+      const rawDirectFields = Array.isArray(st.fieldDefinitions) && st.fieldDefinitions.length > 0
+        ? st.fieldDefinitions
+        : Array.isArray(st.fields)
+        ? st.fields
+        : [];
       const directFields = rawDirectFields.map((f: any, fIdx: number) => mapFieldFromApi(f, fIdx));
 
       const rawGroups = Array.isArray(st.fieldGroups) ? st.fieldGroups : [];
@@ -123,7 +127,11 @@ export const mapCategoryFromApi = (raw: any): Category => {
       const fieldGroups: FieldGroup[] = rawGroups.map((g: any, gIdx: number) => {
         const groupId = String(g.id || `group-${gIdx + 1}`);
         const gName = g.groupName || g.name || `Group ${gIdx + 1}`;
-        const rawGroupFields = Array.isArray(g.fields) ? g.fields : [];
+        const rawGroupFields = Array.isArray(g.fieldDefinitions) && g.fieldDefinitions.length > 0
+          ? g.fieldDefinitions
+          : Array.isArray(g.fields)
+          ? g.fields
+          : [];
         const mappedGroupFields = rawGroupFields.map((gf: any, gfIdx: number) =>
           mapFieldFromApi(gf, gfIdx, groupId)
         );
@@ -156,7 +164,11 @@ export const mapCategoryFromApi = (raw: any): Category => {
       };
     });
   } else {
-    const rawFields = Array.isArray(raw.fields) ? raw.fields : [];
+    const rawFields = Array.isArray(raw.fieldDefinitions) && raw.fieldDefinitions.length > 0
+      ? raw.fieldDefinitions
+      : Array.isArray(raw.fields)
+      ? raw.fields
+      : [];
     const fields = rawFields.map((f: any, idx: number) => mapFieldFromApi(f, idx));
     steps = [
       {

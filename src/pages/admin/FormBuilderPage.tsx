@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -42,6 +42,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCategory } from '@/context/CategoryContext';
 import { FieldType, FormFieldConfig, FormStep, FieldGroup, mapFieldTypeToApi, generateUniqueFieldKey } from '@/types/escrowTypes';
+import { categoryService } from '@/services/categoryService';
 import { LiveFormPreview } from '@/components/admin/LiveFormPreview';
 import { FieldEditorDrawer } from '@/components/admin/FieldEditorDrawer';
 import { PublishFormModal } from '@/components/admin/PublishFormModal';
@@ -143,6 +144,28 @@ export const FormBuilderPage: React.FC = () => {
   // Drag and Drop reordering state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  useEffect(() => {
+    if (!currentCatId) return;
+
+    let isMounted = true;
+    const fetchCategoryFormDetail = async () => {
+      setIsLoadingDetail(true);
+      try {
+        const response = await categoryService.getById(currentCatId);
+        if (response && response.data && isMounted) {
+          updateCategory(currentCatId, response.data);
+        }
+      } catch (err) {
+        console.error('Failed to load category form detail:', err);
+      } finally {
+        if (isMounted) setIsLoadingDetail(false);
+      }
+    };
+
+    fetchCategoryFormDetail();
+  }, [currentCatId]);
 
   if (!category) {
     return (
@@ -176,7 +199,7 @@ export const FormBuilderPage: React.FC = () => {
     fieldGroups: [],
   };
   const stepFields = activeStep.fields || [];
-  const totalFieldsCount = category.fields ? category.fields.length : 0;
+  const totalFieldsCount = steps.reduce((sum, s) => sum + (s.fields ? s.fields.length : 0), 0);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIndex(index);
@@ -991,6 +1014,7 @@ export const FormBuilderPage: React.FC = () => {
       <FormPreviewModal
         isOpen={isPreviewModalOpen}
         onClose={() => setIsPreviewModalOpen(false)}
+        onEditForm={() => setIsPreviewModalOpen(false)}
         categoryTitle={category.title || category.name}
         categoryDescription={category.description}
         steps={steps}

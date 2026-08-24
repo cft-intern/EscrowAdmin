@@ -72,10 +72,20 @@ export const CategoriesPage: React.FC = () => {
 
   // Form inputs for modal
   const [title, setTitle] = useState('');
+  const [slug, setSlug] = useState('');
+  const [isSlugTouched, setIsSlugTouched] = useState(false);
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('Shield');
   const [status, setStatus] = useState<string>('active');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleTitleChange = (val: string) => {
+    setTitle(val);
+    if (!isSlugTouched) {
+      const generatedSlug = val.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      setSlug(generatedSlug);
+    }
+  };
 
   // Load categories from real backend GET /category
   const fetchCategories = async () => {
@@ -117,6 +127,8 @@ export const CategoriesPage: React.FC = () => {
 
   const openCreateModal = () => {
     setTitle('');
+    setSlug('');
+    setIsSlugTouched(false);
     setDescription('');
     setIcon('Shield');
     setStatus('active');
@@ -125,7 +137,10 @@ export const CategoriesPage: React.FC = () => {
 
   const openEditModal = (cat: Category) => {
     setEditingCategory(cat);
-    setTitle(cat.title || cat.name || '');
+    const catName = cat.title || cat.name || '';
+    setTitle(catName);
+    setSlug(cat.slug || catName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
+    setIsSlugTouched(true);
     setDescription(cat.description || '');
     setIcon(cat.icon || 'Shield');
     setStatus(cat.status || 'active');
@@ -149,10 +164,12 @@ export const CategoriesPage: React.FC = () => {
         await categoryService.setStatus(editingCategory.id, status);
       }
 
+      const categorySlug = slug.trim() || categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       const updatedCategoryObj: Category = {
         ...editingCategory,
         title: categoryName,
         name: categoryName,
+        slug: categorySlug,
         description: description.trim(),
         icon,
         status: status as 'active' | 'inactive',
@@ -239,6 +256,7 @@ export const CategoriesPage: React.FC = () => {
     if (isSubmitting) return;
 
     const categoryName = title.trim();
+    const categorySlug = slug.trim() || categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     if (!categoryName) {
       toast.error('Category name is required.');
       return;
@@ -248,6 +266,7 @@ export const CategoriesPage: React.FC = () => {
     try {
       const response = await categoryService.create({
         name: categoryName,
+        slug: categorySlug,
         icon,
         status,
         steps: [],
@@ -516,14 +535,26 @@ export const CategoriesPage: React.FC = () => {
                 <Label className="text-xs font-medium text-slate-300">Category Name / Title *</Label>
                 <Input
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => handleTitleChange(e.target.value)}
                   placeholder="e.g. Website Development"
                   className="bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-xl h-10"
                   required
                 />
               </div>
 
-
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-300">Category Slug *</Label>
+                <Input
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setIsSlugTouched(true);
+                  }}
+                  placeholder="e.g. website-development"
+                  className="bg-slate-950 border-slate-800 text-indigo-300 font-mono text-xs rounded-xl h-10"
+                  required
+                />
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -595,9 +626,23 @@ export const CategoriesPage: React.FC = () => {
                 <Label className="text-xs font-medium text-slate-300">Category Name / Title *</Label>
                 <Input
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => handleTitleChange(e.target.value)}
                   placeholder="e.g. Website Development"
                   className="bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-xl h-10"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-300">Category Slug *</Label>
+                <Input
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setIsSlugTouched(true);
+                  }}
+                  placeholder="e.g. website-development"
+                  className="bg-slate-950 border-slate-800 text-indigo-300 font-mono text-xs rounded-xl h-10"
                   required
                 />
               </div>
@@ -704,6 +749,12 @@ export const CategoriesPage: React.FC = () => {
           onClose={() => {
             setIsPreviewOpen(false);
             setPreviewCategory(null);
+          }}
+          onEditForm={() => {
+            const catId = previewCategory.id;
+            setIsPreviewOpen(false);
+            setPreviewCategory(null);
+            handleOpenBuilder(catId);
           }}
           categoryTitle={previewCategory.title || previewCategory.name}
           categoryDescription={previewCategory.description}
